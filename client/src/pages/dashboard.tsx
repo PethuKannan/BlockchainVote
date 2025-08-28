@@ -23,6 +23,9 @@ export default function Dashboard() {
     enabled: !!token,
   });
 
+  // Ensure elections is an array
+  const electionsList = Array.isArray(elections) ? elections : [];
+
   const voteForCandidate = async (electionId: string, candidateId: string) => {
     try {
       const response = await apiRequest("POST", "/api/vote", {
@@ -126,9 +129,9 @@ export default function Dashboard() {
               <i className="fas fa-spinner fa-spin text-2xl text-muted-foreground mb-4"></i>
               <p className="text-muted-foreground">Loading elections...</p>
             </div>
-          ) : elections && elections.length > 0 ? (
+          ) : electionsList.length > 0 ? (
             <div className="grid gap-6">
-              {elections.map((election: any) => (
+              {electionsList.map((election: any) => (
                 <Card key={election.id} className="border border-border">
                   <CardContent className="p-6">
                     <div className="mb-4">
