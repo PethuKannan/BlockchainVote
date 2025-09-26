@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth";
 import { apiRequest } from "@/lib/queryClient";
+import FaceCapture from "@/components/FaceCapture";
 
 export default function Login() {
   const [, navigate] = useLocation();
@@ -17,6 +18,8 @@ export default function Login() {
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
   const [requiresTotp, setRequiresTotp] = useState(false);
+  const [showFaceLogin, setShowFaceLogin] = useState(false);
+  const [faceLoginUsername, setFaceLoginUsername] = useState("");
 
   // Redirect if already authenticated - use useEffect to avoid render loops
   useEffect(() => {
@@ -70,9 +73,101 @@ export default function Login() {
     }
   };
 
+  const handleFaceVerification = async (isMatch: boolean, confidence: number) => {
+    if (isMatch) {
+      toast({
+        title: "Face Verified",
+        description: `Face recognition successful (${confidence}% confidence)`,
+      });
+      setShowFaceLogin(false);
+    } else {
+      toast({
+        title: "Face Verification Failed",
+        description: `Face not recognized (${confidence}% confidence)`,
+        variant: "destructive",
+      });
+    }
+  };
+
+  const startFaceLogin = () => {
+    const username = form.getValues("username");
+    if (!username) {
+      toast({
+        title: "Username Required",
+        description: "Please enter your username first for face verification",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    setFaceLoginUsername(username);
+    setShowFaceLogin(true);
+  };
+
+  const handleFaceLoginResult = async (descriptor: Float32Array) => {
+    try {
+      setIsLoading(true);
+      
+      const descriptorArray = Array.from(descriptor);
+      const response = await apiRequest("POST", "/api/auth/verify-face", {
+        username: faceLoginUsername,
+        faceDescriptor: descriptorArray
+      });
+      
+      const result = await response.json();
+      
+      if (result.isMatch) {
+        login(result.token, result.user);
+        
+        toast({
+          title: "Face Login Successful",
+          description: `Welcome back! (${result.confidence}% confidence)`,
+        });
+        
+        navigate("/dashboard");
+      }
+    } catch (error: any) {
+      const errorData = JSON.parse(error.message.split(': ')[1] || '{}');
+      toast({
+        title: "Face Login Failed",
+        description: errorData.message || "Face verification failed",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+      setShowFaceLogin(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-background flex items-center justify-center p-4">
       <div className="w-full max-w-md">
+        
+        {/* Face Login Modal */}
+        {showFaceLogin && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <div className="bg-background rounded-lg max-w-lg w-full">
+              <div className="p-4 border-b border-border">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-lg font-semibold">Face Recognition Login</h3>
+                  <button 
+                    onClick={() => setShowFaceLogin(false)}
+                    className="text-muted-foreground hover:text-foreground"
+                    data-testid="button-close-face-login"
+                  >
+                    <i className="fas fa-times"></i>
+                  </button>
+                </div>
+              </div>
+              <div className="p-4">
+                <FaceCapture
+                  mode="enroll"
+                  onFaceCapture={handleFaceLoginResult}
+                />
+              </div>
+            </div>
+          </div>
+        )}
         <Card className="border border-border shadow-sm">
           <CardContent className="pt-6">
             <div className="text-center mb-6">
@@ -154,6 +249,30 @@ export default function Login() {
                 )}
               </Button>
             </form>
+
+            {/* Face Login Alternative */}
+            <div className="mt-6 text-center">
+              <div className="relative">
+                <div className="absolute inset-0 flex items-center">
+                  <div className="w-full border-t border-border"></div>
+                </div>
+                <div className="relative flex justify-center text-xs uppercase">
+                  <span className="bg-background px-2 text-muted-foreground">Or</span>
+                </div>
+              </div>
+              
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full mt-4"
+                onClick={startFaceLogin}
+                disabled={isLoading}
+                data-testid="button-face-login"
+              >
+                <i className="fas fa-user-check mr-2"></i>
+                Login with Face Recognition
+              </Button>
+            </div>
 
             <div className="mt-6 text-center">
               <p className="text-sm text-muted-foreground">

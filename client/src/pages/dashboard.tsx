@@ -104,17 +104,34 @@ export default function Dashboard() {
                         2FA {user.totpEnabled ? 'Enabled' : 'Disabled'}
                       </span>
                     </div>
+                    <div className="flex items-center space-x-2">
+                      <i className={`fas fa-user-check ${user.faceEnabled ? 'text-success' : 'text-muted-foreground'}`}></i>
+                      <span className={`text-sm ${user.faceEnabled ? 'text-success' : 'text-muted-foreground'}`}>
+                        Face Recognition {user.faceEnabled ? 'Enabled' : 'Disabled'}
+                      </span>
+                    </div>
                   </div>
                 </div>
-                {!user.totpEnabled && (
-                  <Button 
-                    onClick={() => navigate("/totp-setup")}
-                    variant="outline"
-                    data-testid="button-setup-2fa"
-                  >
-                    Setup 2FA
-                  </Button>
-                )}
+                <div className="flex space-x-2">
+                  {!user.totpEnabled && (
+                    <Button 
+                      onClick={() => navigate("/totp-setup")}
+                      variant="outline"
+                      data-testid="button-setup-2fa"
+                    >
+                      Setup 2FA
+                    </Button>
+                  )}
+                  {!user.faceEnabled && (
+                    <Button 
+                      onClick={() => navigate("/face-setup")}
+                      variant="outline"
+                      data-testid="button-setup-face"
+                    >
+                      Setup Face Recognition
+                    </Button>
+                  )}
+                </div>
               </div>
             </CardContent>
           </Card>

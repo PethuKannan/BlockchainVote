@@ -1,0 +1,335 @@
+import { useState, useRef, useEffect } from "react";
+import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { useToast } from "@/hooks/use-toast";
+import * as faceapi from "face-api.js";
+
+interface FaceCaptureProps {
+  mode: "enroll" | "verify";
+  onFaceCapture?: (descriptor: Float32Array) => void;
+  onVerificationResult?: (isMatch: boolean, confidence: number) => void;
+  existingDescriptor?: number[] | null;
+  className?: string;
+}
+
+export default function FaceCapture({ 
+  mode, 
+  onFaceCapture, 
+  onVerificationResult, 
+  existingDescriptor,
+  className = "" 
+}: FaceCaptureProps) {
+  const [isLoading, setIsLoading] = useState(false);
+  const [isModelLoaded, setIsModelLoaded] = useState(false);
+  const [isVideoStarted, setIsVideoStarted] = useState(false);
+  const [faceDetected, setFaceDetected] = useState(false);
+  const [captureStatus, setCaptureStatus] = useState<'idle' | 'detecting' | 'captured' | 'error'>('idle');
+  
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const detectionIntervalRef = useRef<number | null>(null);
+  
+  const { toast } = useToast();
+
+  // Load face-api.js models
+  useEffect(() => {
+    const loadModels = async () => {
+      try {
+        setIsLoading(true);
+        
+        // Use CDN for models since we don't have local models set up
+        const MODEL_URL = 'https://justadudewhohacks.github.io/face-api.js/models';
+        
+        await Promise.all([
+          faceapi.nets.ssdMobilenetv1.loadFromUri(MODEL_URL),
+          faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
+          faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL),
+        ]);
+        
+        setIsModelLoaded(true);
+        console.log('Face-api.js models loaded successfully');
+      } catch (error) {
+        console.error('Error loading face-api.js models:', error);
+        toast({
+          title: "Model Loading Failed",
+          description: "Failed to load face recognition models. Please refresh and try again.",
+          variant: "destructive",
+        });
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadModels();
+  }, [toast]);
+
+  // Start camera
+  const startCamera = async () => {
+    try {
+      if (!isModelLoaded) {
+        toast({
+          title: "Models Not Ready",
+          description: "Please wait for face recognition models to load.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          width: { ideal: 640 },
+          height: { ideal: 480 },
+          facingMode: 'user'
+        }
+      });
+
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        streamRef.current = stream;
+        setIsVideoStarted(true);
+        setCaptureStatus('detecting');
+        
+        // Start face detection once video is loaded
+        videoRef.current.addEventListener('loadeddata', startFaceDetection);
+      }
+    } catch (error) {
+      console.error('Error accessing camera:', error);
+      toast({
+        title: "Camera Access Denied",
+        description: "Please allow camera access to use face recognition.",
+        variant: "destructive",
+      });
+      setCaptureStatus('error');
+    }
+  };
+
+  // Start face detection loop
+  const startFaceDetection = () => {
+    if (!videoRef.current || !canvasRef.current) return;
+
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext('2d');
+
+    // Set canvas dimensions to match video
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+
+    const detectFaces = async () => {
+      if (!video || video.paused || video.ended) return;
+
+      try {
+        const detections = await faceapi
+          .detectAllFaces(video)
+          .withFaceLandmarks()
+          .withFaceDescriptors();
+
+        // Clear canvas
+        if (ctx) {
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+        }
+
+        if (detections.length > 0) {
+          setFaceDetected(true);
+          
+          // Draw detection boxes
+          detections.forEach(detection => {
+            const { x, y, width, height } = detection.detection.box;
+            if (ctx) {
+              ctx.strokeStyle = '#00ff00';
+              ctx.lineWidth = 2;
+              ctx.strokeRect(x, y, width, height);
+              
+              // Draw confidence
+              ctx.fillStyle = '#00ff00';
+              ctx.font = '16px Arial';
+              ctx.fillText(
+                `${Math.round(detection.detection.score * 100)}%`,
+                x, y - 10
+              );
+            }
+          });
+
+          // If we have exactly one face, we can proceed
+          if (detections.length === 1) {
+            const detection = detections[0];
+            
+            if (mode === "enroll" && onFaceCapture) {
+              // For enrollment, capture the face descriptor
+              onFaceCapture(detection.descriptor);
+              setCaptureStatus('captured');
+              stopCamera();
+            } else if (mode === "verify" && onVerificationResult && existingDescriptor) {
+              // For verification, compare with existing descriptor
+              const distance = faceapi.euclideanDistance(
+                detection.descriptor,
+                new Float32Array(existingDescriptor)
+              );
+              
+              // Lower distance means better match (threshold ~0.6 is typical)
+              const isMatch = distance < 0.6;
+              const confidence = Math.max(0, (1 - distance) * 100);
+              
+              onVerificationResult(isMatch, confidence);
+              setCaptureStatus(isMatch ? 'captured' : 'error');
+              stopCamera();
+            }
+          }
+        } else {
+          setFaceDetected(false);
+          
+          // Draw "no face detected" message
+          if (ctx) {
+            ctx.fillStyle = '#ff0000';
+            ctx.font = '18px Arial';
+            ctx.fillText('No face detected', 10, 30);
+          }
+        }
+      } catch (error) {
+        console.error('Face detection error:', error);
+      }
+    };
+
+    // Start detection loop
+    detectionIntervalRef.current = window.setInterval(detectFaces, 100);
+  };
+
+  // Stop camera and cleanup
+  const stopCamera = () => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => track.stop());
+      streamRef.current = null;
+    }
+    
+    if (detectionIntervalRef.current) {
+      clearInterval(detectionIntervalRef.current);
+      detectionIntervalRef.current = null;
+    }
+    
+    setIsVideoStarted(false);
+    setFaceDetected(false);
+  };
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      stopCamera();
+    };
+  }, []);
+
+  const getStatusMessage = () => {
+    switch (captureStatus) {
+      case 'idle':
+        return mode === 'enroll' ? 'Ready to capture your face for registration' : 'Ready to verify your identity';
+      case 'detecting':
+        return faceDetected 
+          ? 'Face detected! Hold still...' 
+          : 'Please position your face in the camera view';
+      case 'captured':
+        return mode === 'enroll' ? 'Face captured successfully!' : 'Face verified successfully!';
+      case 'error':
+        return mode === 'verify' ? 'Face verification failed' : 'Face capture failed';
+      default:
+        return '';
+    }
+  };
+
+  const getStatusColor = () => {
+    switch (captureStatus) {
+      case 'detecting':
+        return faceDetected ? 'text-warning' : 'text-muted-foreground';
+      case 'captured':
+        return 'text-success';
+      case 'error':
+        return 'text-destructive';
+      default:
+        return 'text-muted-foreground';
+    }
+  };
+
+  return (
+    <Card className={`border border-border ${className}`}>
+      <CardContent className="p-6">
+        <div className="text-center mb-4">
+          <div className="w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-3">
+            <i className="fas fa-camera text-primary text-xl"></i>
+          </div>
+          <h3 className="text-lg font-semibold text-foreground mb-2">
+            {mode === 'enroll' ? 'Face Registration' : 'Face Verification'}
+          </h3>
+          <p className={`text-sm ${getStatusColor()}`}>
+            {getStatusMessage()}
+          </p>
+        </div>
+
+        <div className="relative bg-muted/30 rounded-lg overflow-hidden mb-4" style={{ aspectRatio: '4/3' }}>
+          {isVideoStarted ? (
+            <>
+              <video
+                ref={videoRef}
+                autoPlay
+                playsInline
+                muted
+                className="w-full h-full object-cover"
+                data-testid="face-capture-video"
+              />
+              <canvas
+                ref={canvasRef}
+                className="absolute top-0 left-0 w-full h-full object-cover"
+                data-testid="face-capture-canvas"
+              />
+            </>
+          ) : (
+            <div className="w-full h-full flex items-center justify-center">
+              {isLoading ? (
+                <div className="text-center">
+                  <i className="fas fa-spinner fa-spin text-2xl text-muted-foreground mb-2"></i>
+                  <p className="text-sm text-muted-foreground">Loading models...</p>
+                </div>
+              ) : (
+                <div className="text-center">
+                  <i className="fas fa-video text-4xl text-muted-foreground mb-4"></i>
+                  <p className="text-sm text-muted-foreground">Click start to begin</p>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        <div className="flex items-center justify-center space-x-4">
+          {!isVideoStarted ? (
+            <Button
+              onClick={startCamera}
+              disabled={isLoading || !isModelLoaded}
+              data-testid="button-start-camera"
+            >
+              <i className="fas fa-play mr-2"></i>
+              Start Camera
+            </Button>
+          ) : (
+            <Button
+              onClick={stopCamera}
+              variant="outline"
+              data-testid="button-stop-camera"
+            >
+              <i className="fas fa-stop mr-2"></i>
+              Stop Camera
+            </Button>
+          )}
+        </div>
+
+        {/* Instructions */}
+        <div className="mt-4 p-4 bg-accent rounded-lg">
+          <h4 className="text-sm font-semibold text-foreground mb-2">Instructions:</h4>
+          <ul className="text-xs text-muted-foreground space-y-1">
+            <li>• Ensure good lighting for better detection</li>
+            <li>• Keep your face centered in the camera view</li>
+            <li>• Hold still when your face is detected</li>
+            <li>• Only one face should be visible in the camera</li>
+          </ul>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}

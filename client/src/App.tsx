@@ -8,6 +8,7 @@ import NotFound from "@/pages/not-found";
 import Register from "@/pages/auth/register";
 import Login from "@/pages/auth/login";
 import TOTPSetup from "@/pages/auth/totp-setup";
+import FaceSetup from "@/pages/auth/face-setup";
 import Dashboard from "@/pages/dashboard";
 
 function Router() {
@@ -17,6 +18,7 @@ function Router() {
       <Route path="/register" component={Register} />
       <Route path="/login" component={Login} />
       <Route path="/totp-setup" component={TOTPSetup} />
+      <Route path="/face-setup" component={FaceSetup} />
       <Route path="/dashboard" component={Dashboard} />
       <Route component={NotFound} />
     </Switch>

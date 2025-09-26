@@ -1,7 +1,7 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { insertUserSchema, loginSchema, totpSetupSchema, voteSchema } from "@shared/schema";
+import { insertUserSchema, loginSchema, totpSetupSchema, voteSchema, faceEnrollSchema, faceVerifySchema } from "@shared/schema";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import speakeasy from "speakeasy";
@@ -223,12 +223,95 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Face enrollment route
+  app.post("/api/auth/enroll-face", authenticateToken, async (req: any, res) => {
+    try {
+      const user = req.user;
+      const { faceDescriptor } = faceEnrollSchema.parse(req.body);
+      
+      if (user.faceEnabled) {
+        return res.status(400).json({ message: "Face recognition already enabled for this user" });
+      }
+      
+      // Store the face descriptor
+      await storage.updateUser(user.id, { 
+        faceDescriptor: faceDescriptor,
+        faceEnabled: true 
+      });
+      
+      res.json({
+        message: "Face enrolled successfully",
+        faceEnabled: true,
+      });
+    } catch (error: any) {
+      res.status(400).json({ message: error.message || "Face enrollment failed" });
+    }
+  });
+
+  // Face verification route
+  app.post("/api/auth/verify-face", async (req, res) => {
+    try {
+      const { username, faceDescriptor } = faceVerifySchema.extend({
+        username: loginSchema.shape.username,
+      }).parse(req.body);
+      
+      // Find user
+      const user = await storage.getUserByUsername(username);
+      if (!user || !user.faceEnabled || !user.faceDescriptor) {
+        return res.status(401).json({ message: "Face recognition not enabled for this user" });
+      }
+      
+      // Calculate Euclidean distance between descriptors
+      const storedDescriptor = user.faceDescriptor as number[];
+      let distance = 0;
+      
+      for (let i = 0; i < faceDescriptor.length; i++) {
+        const diff = faceDescriptor[i] - storedDescriptor[i];
+        distance += diff * diff;
+      }
+      distance = Math.sqrt(distance);
+      
+      // Threshold for face match (typical range 0.4-0.6)
+      const threshold = 0.6;
+      const isMatch = distance < threshold;
+      const confidence = Math.max(0, (1 - distance) * 100);
+      
+      if (isMatch) {
+        // Generate JWT token for successful face verification
+        const token = jwt.sign({ userId: user.id }, JWT_SECRET, { expiresIn: '24h' });
+        
+        res.json({
+          message: "Face verification successful",
+          isMatch: true,
+          confidence: Math.round(confidence),
+          token,
+          user: {
+            id: user.id,
+            username: user.username,
+            fullName: user.fullName,
+            totpEnabled: user.totpEnabled,
+            faceEnabled: user.faceEnabled,
+          }
+        });
+      } else {
+        res.status(401).json({ 
+          message: "Face verification failed",
+          isMatch: false,
+          confidence: Math.round(confidence)
+        });
+      }
+    } catch (error: any) {
+      res.status(400).json({ message: error.message || "Face verification failed" });
+    }
+  });
+
   app.get("/api/user/me", authenticateToken, async (req: any, res) => {
     res.json({
       id: req.user.id,
       username: req.user.username,
       fullName: req.user.fullName,
       totpEnabled: req.user.totpEnabled,
+      faceEnabled: req.user.faceEnabled,
     });
   });
 

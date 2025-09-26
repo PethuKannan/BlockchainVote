@@ -6,6 +6,7 @@ interface User {
   username: string;
   fullName: string;
   totpEnabled: boolean;
+  faceEnabled: boolean;
 }
 
 interface AuthContextType {

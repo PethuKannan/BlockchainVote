@@ -63,6 +63,14 @@ export const totpSetupSchema = z.object({
   token: z.string().length(6, "TOTP code must be 6 digits").regex(/^\d{6}$/, "TOTP code must be numeric"),
 });
 
+export const faceEnrollSchema = z.object({
+  faceDescriptor: z.array(z.number()).min(128, "Face descriptor must have at least 128 dimensions"),
+});
+
+export const faceVerifySchema = z.object({
+  faceDescriptor: z.array(z.number()).min(128, "Face descriptor must have at least 128 dimensions"),
+});
+
 export const voteSchema = z.object({
   electionId: z.string().min(1, "Election ID is required"),
   candidateId: z.string().min(1, "Candidate ID is required"),
@@ -72,6 +80,8 @@ export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
 export type LoginData = z.infer<typeof loginSchema>;
 export type TOTPSetup = z.infer<typeof totpSetupSchema>;
+export type FaceEnroll = z.infer<typeof faceEnrollSchema>;
+export type FaceVerify = z.infer<typeof faceVerifySchema>;
 export type Vote = typeof votes.$inferSelect;
 export type Election = typeof elections.$inferSelect;
 export type VotingBlock = typeof votingBlocks.$inferSelect;

@@ -39,7 +39,14 @@ export default function Register() {
         description: "Account created successfully! Now set up two-factor authentication.",
       });
       
-      navigate("/totp-setup");
+      // Check if user has TOTP enabled, otherwise go to TOTP setup first
+      if (!result.user.totpEnabled) {
+        navigate("/totp-setup");
+      } else if (!result.user.faceEnabled) {
+        navigate("/face-setup");
+      } else {
+        navigate("/dashboard");
+      }
     } catch (error: any) {
       toast({
         title: "Registration Failed",

@@ -121,7 +121,12 @@ export default function TOTPSetup() {
   };
 
   const completeTOTPSetup = () => {
-    navigate("/dashboard");
+    // Check if user has face recognition enabled, if not offer face setup
+    if (!user?.faceEnabled) {
+      navigate("/face-setup");
+    } else {
+      navigate("/dashboard");
+    }
   };
 
   const skipTOTP = () => {
