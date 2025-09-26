@@ -76,6 +76,8 @@ export class MemStorage implements IStorage {
       id,
       totpSecret: null,
       totpEnabled: false,
+      faceDescriptor: null,
+      faceEnabled: false,
       createdAt: new Date(),
     };
     this.users.set(id, user);

@@ -10,6 +10,8 @@ export const users = pgTable("users", {
   fullName: text("full_name").notNull(),
   totpSecret: text("totp_secret"),
   totpEnabled: boolean("totp_enabled").default(false),
+  faceDescriptor: jsonb("face_descriptor"),
+  faceEnabled: boolean("face_enabled").default(false),
   createdAt: timestamp("created_at").default(sql`now()`),
 });
 
