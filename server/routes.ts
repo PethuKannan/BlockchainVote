@@ -129,17 +129,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
       
-      // Generate JWT
+      // Check if face recognition is enabled and required
+      if (!user.faceEnabled) {
+        return res.status(401).json({ 
+          message: "Face recognition is required for login. Please set up face recognition first.",
+          requiresFaceSetup: true 
+        });
+      }
+      
+      // If face is enabled, password/TOTP validation passed, return token and user info
+      // Face verification will be handled separately in the frontend
       const token = jwt.sign({ userId: user.id }, JWT_SECRET, { expiresIn: '24h' });
       
       res.json({
-        message: "Login successful",
+        message: "Credentials validated - face verification required",
         token,
         user: {
           id: user.id,
           username: user.username,
           fullName: user.fullName,
           totpEnabled: user.totpEnabled,
+          faceEnabled: user.faceEnabled,
         }
       });
     } catch (error: any) {
