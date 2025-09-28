@@ -101,13 +101,41 @@ export default function FaceCapture({
 
       console.log('Camera access granted, setting up video stream');
       if (videoRef.current) {
-        videoRef.current.srcObject = stream;
+        const video = videoRef.current;
+        video.srcObject = stream;
         streamRef.current = stream;
         setIsVideoStarted(true);
         setCaptureStatus('detecting');
         
-        // Start face detection once video is loaded
-        videoRef.current.addEventListener('loadeddata', startFaceDetection);
+        // Add video event listeners for debugging
+        video.addEventListener('loadeddata', () => {
+          console.log('Video loaded:', {
+            videoWidth: video.videoWidth,
+            videoHeight: video.videoHeight,
+            readyState: video.readyState
+          });
+          startFaceDetection();
+        });
+        
+        video.addEventListener('canplay', () => {
+          console.log('Video can play');
+        });
+        
+        video.addEventListener('playing', () => {
+          console.log('Video is playing');
+        });
+        
+        video.addEventListener('error', (e) => {
+          console.error('Video error:', e);
+        });
+        
+        // Force video to play
+        video.play().then(() => {
+          console.log('Video play() succeeded');
+        }).catch((error) => {
+          console.error('Video play() failed:', error);
+        });
+        
         console.log('Video stream setup complete');
       }
     } catch (error: any) {
@@ -300,7 +328,7 @@ export default function FaceCapture({
           </p>
         </div>
 
-        <div className="relative bg-muted/30 rounded-lg overflow-hidden mb-4" style={{ aspectRatio: '4/3' }}>
+        <div className="relative bg-muted/30 rounded-lg overflow-hidden mb-4" style={{ aspectRatio: '4/3', minHeight: '300px' }}>
           {isVideoStarted ? (
             <>
               <video
@@ -308,14 +336,29 @@ export default function FaceCapture({
                 autoPlay
                 playsInline
                 muted
-                className="w-full h-full object-cover"
+                className="w-full h-full object-cover bg-black"
+                style={{ 
+                  width: '100%', 
+                  height: '100%',
+                  display: 'block',
+                  backgroundColor: '#000'
+                }}
                 data-testid="face-capture-video"
               />
               <canvas
                 ref={canvasRef}
-                className="absolute top-0 left-0 w-full h-full object-cover"
+                className="absolute top-0 left-0 w-full h-full pointer-events-none"
+                style={{ 
+                  width: '100%', 
+                  height: '100%',
+                  zIndex: 1
+                }}
                 data-testid="face-capture-canvas"
               />
+              {/* Debug info overlay */}
+              <div className="absolute top-2 left-2 bg-black/70 text-white text-xs p-2 rounded z-10">
+                Status: {captureStatus} | Video: {isVideoStarted ? 'ON' : 'OFF'}
+              </div>
             </>
           ) : (
             <div className="w-full h-full flex items-center justify-center">
