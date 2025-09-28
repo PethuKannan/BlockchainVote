@@ -67,6 +67,8 @@ export default function FaceCapture({
   // Start camera
   const startCamera = async () => {
     try {
+      console.log('Starting camera - Models loaded:', isModelLoaded);
+      
       if (!isModelLoaded) {
         toast({
           title: "Models Not Ready",
@@ -76,6 +78,19 @@ export default function FaceCapture({
         return;
       }
 
+      // Check if getUserMedia is available
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        throw new Error('Camera API not supported in this browser');
+      }
+
+      // Check for WebGL support (required by face-api.js)
+      const canvas = document.createElement('canvas');
+      const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+      if (!gl) {
+        throw new Error('WebGL not supported - required for face recognition');
+      }
+
+      console.log('Requesting camera access...');
       const stream = await navigator.mediaDevices.getUserMedia({
         video: {
           width: { ideal: 640 },
@@ -84,6 +99,7 @@ export default function FaceCapture({
         }
       });
 
+      console.log('Camera access granted, setting up video stream');
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
         streamRef.current = stream;
@@ -92,12 +108,33 @@ export default function FaceCapture({
         
         // Start face detection once video is loaded
         videoRef.current.addEventListener('loadeddata', startFaceDetection);
+        console.log('Video stream setup complete');
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error accessing camera:', error);
+      
+      let errorMessage = "Please allow camera access to use face recognition.";
+      let errorTitle = "Camera Access Denied";
+      
+      if (error.name === 'NotAllowedError') {
+        errorMessage = "Camera access was denied. Please allow camera permissions and try again.";
+      } else if (error.name === 'NotFoundError') {
+        errorMessage = "No camera found. Please connect a camera and try again.";
+        errorTitle = "Camera Not Found";
+      } else if (error.name === 'NotSupportedError') {
+        errorMessage = "Camera is not supported in this browser or requires HTTPS.";
+        errorTitle = "Camera Not Supported";
+      } else if (error.message.includes('not supported')) {
+        errorMessage = "Camera API not supported. Try using Chrome, Firefox, or Safari.";
+        errorTitle = "Browser Not Supported";
+      } else {
+        errorMessage = `Camera error: ${error.message}`;
+        errorTitle = "Camera Error";
+      }
+      
       toast({
-        title: "Camera Access Denied",
-        description: "Please allow camera access to use face recognition.",
+        title: errorTitle,
+        description: errorMessage,
         variant: "destructive",
       });
       setCaptureStatus('error');
