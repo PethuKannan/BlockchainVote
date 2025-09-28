@@ -240,13 +240,21 @@ export default function FaceCapture({
     canvas.height = video.videoHeight;
 
     const detectFaces = async () => {
-      if (!video || video.paused || video.ended) {
-        console.log('Video not ready:', {
-          video: !!video,
-          paused: video?.paused,
-          ended: video?.ended
-        });
+      if (!video || video.ended) {
+        console.log('Video not available or ended');
         return;
+      }
+      
+      // If video is paused, try to resume it
+      if (video.paused) {
+        console.log('Video is paused, attempting to resume...');
+        try {
+          await video.play();
+          console.log('Video resumed successfully');
+        } catch (error) {
+          console.log('Failed to resume video:', error);
+          return;
+        }
       }
 
       try {
