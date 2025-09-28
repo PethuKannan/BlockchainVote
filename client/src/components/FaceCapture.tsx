@@ -100,44 +100,77 @@ export default function FaceCapture({
       });
 
       console.log('Camera access granted, setting up video stream');
-      if (videoRef.current) {
-        const video = videoRef.current;
-        video.srcObject = stream;
-        streamRef.current = stream;
+      
+      if (!videoRef.current) {
+        console.error('Video ref is null');
+        throw new Error('Video element not available');
+      }
+
+      const video = videoRef.current;
+      console.log('Video element found:', video);
+      
+      // Set up video properties
+      video.srcObject = stream;
+      video.autoplay = true;
+      video.playsInline = true;
+      video.muted = true;
+      
+      streamRef.current = stream;
+      console.log('Stream assigned to video');
+      
+      // Handle video events
+      const handleLoadedMetadata = () => {
+        console.log('Video metadata loaded:', {
+          videoWidth: video.videoWidth,
+          videoHeight: video.videoHeight,
+          readyState: video.readyState
+        });
         setIsVideoStarted(true);
         setCaptureStatus('detecting');
         
-        // Add video event listeners for debugging
-        video.addEventListener('loadeddata', () => {
-          console.log('Video loaded:', {
-            videoWidth: video.videoWidth,
-            videoHeight: video.videoHeight,
-            readyState: video.readyState
-          });
+        // Start face detection after a short delay to ensure video is playing
+        setTimeout(() => {
           startFaceDetection();
-        });
-        
-        video.addEventListener('canplay', () => {
-          console.log('Video can play');
-        });
-        
-        video.addEventListener('playing', () => {
-          console.log('Video is playing');
-        });
-        
-        video.addEventListener('error', (e) => {
-          console.error('Video error:', e);
-        });
-        
-        // Force video to play
-        video.play().then(() => {
-          console.log('Video play() succeeded');
-        }).catch((error) => {
-          console.error('Video play() failed:', error);
-        });
-        
-        console.log('Video stream setup complete');
+        }, 500);
+      };
+
+      const handleCanPlay = () => {
+        console.log('Video can play');
+      };
+
+      const handlePlaying = () => {
+        console.log('Video is playing');
+      };
+
+      const handleError = (e: any) => {
+        console.error('Video error event:', e);
+        setCaptureStatus('error');
+      };
+
+      // Remove existing event listeners to avoid duplicates
+      video.removeEventListener('loadedmetadata', handleLoadedMetadata);
+      video.removeEventListener('canplay', handleCanPlay);
+      video.removeEventListener('playing', handlePlaying);
+      video.removeEventListener('error', handleError);
+
+      // Add event listeners
+      video.addEventListener('loadedmetadata', handleLoadedMetadata);
+      video.addEventListener('canplay', handleCanPlay);
+      video.addEventListener('playing', handlePlaying);
+      video.addEventListener('error', handleError);
+      
+      // Manually trigger play
+      try {
+        await video.play();
+        console.log('Video play() succeeded');
+      } catch (error) {
+        console.error('Video play() failed:', error);
+        // Try to set video started anyway in case autoplay works
+        setIsVideoStarted(true);
+        setCaptureStatus('detecting');
       }
+      
+      console.log('Video stream setup complete');
     } catch (error: any) {
       console.error('Error accessing camera:', error);
       
@@ -328,49 +361,67 @@ export default function FaceCapture({
           </p>
         </div>
 
-        <div className="relative bg-muted/30 rounded-lg overflow-hidden mb-4" style={{ aspectRatio: '4/3', minHeight: '300px' }}>
-          {isVideoStarted ? (
-            <>
-              <video
-                ref={videoRef}
-                autoPlay
-                playsInline
-                muted
-                className="w-full h-full object-cover bg-black"
-                style={{ 
-                  width: '100%', 
-                  height: '100%',
-                  display: 'block',
-                  backgroundColor: '#000'
-                }}
-                data-testid="face-capture-video"
-              />
-              <canvas
-                ref={canvasRef}
-                className="absolute top-0 left-0 w-full h-full pointer-events-none"
-                style={{ 
-                  width: '100%', 
-                  height: '100%',
-                  zIndex: 1
-                }}
-                data-testid="face-capture-canvas"
-              />
-              {/* Debug info overlay */}
-              <div className="absolute top-2 left-2 bg-black/70 text-white text-xs p-2 rounded z-10">
-                Status: {captureStatus} | Video: {isVideoStarted ? 'ON' : 'OFF'}
-              </div>
-            </>
-          ) : (
-            <div className="w-full h-full flex items-center justify-center">
+        <div 
+          className="relative bg-gray-900 rounded-lg overflow-hidden mb-4" 
+          style={{ width: '100%', height: '400px' }}
+        >
+          <video
+            ref={videoRef}
+            autoPlay
+            playsInline
+            muted
+            className="w-full h-full object-cover"
+            style={{ 
+              width: '100%', 
+              height: '100%',
+              display: 'block',
+              backgroundColor: '#000',
+              position: 'relative',
+              zIndex: 0
+            }}
+            data-testid="face-capture-video"
+          />
+          
+          <canvas
+            ref={canvasRef}
+            className="absolute top-0 left-0 pointer-events-none"
+            style={{ 
+              width: '100%', 
+              height: '100%',
+              zIndex: 1,
+              position: 'absolute'
+            }}
+            data-testid="face-capture-canvas"
+          />
+          
+          {/* Status overlay */}
+          <div className="absolute top-4 left-4 bg-black/80 text-white text-sm px-3 py-2 rounded-md z-20">
+            <div className="flex items-center space-x-2">
+              <div className={`w-2 h-2 rounded-full ${isVideoStarted ? 'bg-green-500' : 'bg-red-500'}`}></div>
+              <span>{isVideoStarted ? 'Camera Active' : 'Camera Inactive'}</span>
+            </div>
+            <div className="text-xs opacity-75 mt-1">Status: {captureStatus}</div>
+          </div>
+          
+          {/* Loading/Error overlay */}
+          {!isVideoStarted && (
+            <div className="absolute inset-0 flex items-center justify-center bg-gray-900/90 z-10">
               {isLoading ? (
-                <div className="text-center">
-                  <i className="fas fa-spinner fa-spin text-2xl text-muted-foreground mb-2"></i>
-                  <p className="text-sm text-muted-foreground">Loading models...</p>
+                <div className="text-center text-white">
+                  <i className="fas fa-spinner fa-spin text-3xl mb-3"></i>
+                  <p className="text-lg">Loading face detection models...</p>
+                </div>
+              ) : captureStatus === 'error' ? (
+                <div className="text-center text-red-400">
+                  <i className="fas fa-exclamation-triangle text-3xl mb-3"></i>
+                  <p className="text-lg">Camera Error</p>
+                  <p className="text-sm opacity-75">Check camera permissions</p>
                 </div>
               ) : (
-                <div className="text-center">
-                  <i className="fas fa-video text-4xl text-muted-foreground mb-4"></i>
-                  <p className="text-sm text-muted-foreground">Click start to begin</p>
+                <div className="text-center text-gray-400">
+                  <i className="fas fa-video text-4xl mb-4"></i>
+                  <p className="text-lg">Ready to start camera</p>
+                  <p className="text-sm opacity-75">Click "Start Camera" to begin</p>
                 </div>
               )}
             </div>
