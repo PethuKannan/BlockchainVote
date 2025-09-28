@@ -25,6 +25,7 @@ export default function FaceCapture({
   const [faceDetected, setFaceDetected] = useState(false);
   const [captureStatus, setCaptureStatus] = useState<'idle' | 'detecting' | 'captured' | 'error'>('idle');
   const [enrollmentTriggered, setEnrollmentTriggered] = useState(false);
+  const [verificationTriggered, setVerificationTriggered] = useState(false);
   
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -129,6 +130,7 @@ export default function FaceCapture({
         setIsVideoStarted(true);
         setCaptureStatus('detecting');
         setEnrollmentTriggered(false); // Reset enrollment flag when video starts
+        setVerificationTriggered(false); // Reset verification flag when video starts
         
         // Start face detection after a short delay to ensure video is playing
         setTimeout(() => {
@@ -262,8 +264,11 @@ export default function FaceCapture({
               onFaceCapture(detection.descriptor);
               setCaptureStatus('captured');
               stopCamera();
-            } else if (mode === "verify" && onVerificationResult && existingDescriptor) {
-              // For verification, compare with existing descriptor
+            } else if (mode === "verify" && onVerificationResult && existingDescriptor && !verificationTriggered) {
+              // For verification, compare with existing descriptor (only once)
+              console.log("Triggering face verification (first time)");
+              setVerificationTriggered(true);
+              
               const distance = faceapi.euclideanDistance(
                 detection.descriptor,
                 new Float32Array(existingDescriptor)
@@ -272,6 +277,8 @@ export default function FaceCapture({
               // Lower distance means better match (threshold ~0.6 is typical)
               const isMatch = distance < 0.6;
               const confidence = Math.max(0, (1 - distance) * 100);
+              
+              console.log("Face verification result:", { isMatch, confidence, distance });
               
               onVerificationResult(isMatch, confidence);
               setCaptureStatus(isMatch ? 'captured' : 'error');
