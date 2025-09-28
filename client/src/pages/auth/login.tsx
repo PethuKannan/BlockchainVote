@@ -99,7 +99,7 @@ export default function Login() {
     }
   };
 
-  const handleFaceVerification = async (descriptor: Float32Array) => {
+  const handleVerificationResult = async (isMatch: boolean, confidence: number) => {
     try {
       setIsLoading(true);
       
@@ -113,44 +113,38 @@ export default function Login() {
         return;
       }
       
-      // Verify face with server
-      const descriptorArray = Array.from(descriptor);
-      const response = await apiRequest("POST", "/api/auth/verify-face", {
-        username: form.getValues("username"),
-        faceDescriptor: descriptorArray
-      });
-      
-      const result = await response.json();
-      
-      if (result.isMatch) {
+      if (isMatch) {
         // Complete login with the previously validated credentials
         login(pendingAuthData.token, pendingAuthData.user);
         
         toast({
           title: "Login Successful!",
-          description: `All authentication factors verified (${result.confidence}% face confidence)`,
+          description: `All authentication factors verified (${confidence.toFixed(1)}% face confidence)`,
         });
         
         navigate("/dashboard");
       } else {
         toast({
           title: "Face Verification Failed",
-          description: `Face does not match (${result.confidence}% confidence). Please try again.`,
+          description: `Face does not match (${confidence.toFixed(1)}% confidence). Please try again.`,
           variant: "destructive",
         });
+        
+        // Reset to allow retry
+        setShowFaceVerification(false);
+        setPendingAuthData(null);
       }
       
     } catch (error: any) {
-      const errorData = JSON.parse(error.message.split(': ')[1] || '{}');
       toast({
         title: "Face Verification Error",
-        description: errorData.message || "Face verification failed. Please try again.",
+        description: "Face verification failed. Please try again.",
         variant: "destructive",
       });
-    } finally {
-      setIsLoading(false);
       setShowFaceVerification(false);
       setPendingAuthData(null);
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -206,7 +200,8 @@ export default function Login() {
                 <div className="p-4">
                   <FaceCapture
                     mode="verify"
-                    onFaceCapture={handleFaceVerification}
+                    onVerificationResult={handleVerificationResult}
+                    existingDescriptor={pendingAuthData?.user?.faceDescriptor}
                   />
                 </div>
               </div>
