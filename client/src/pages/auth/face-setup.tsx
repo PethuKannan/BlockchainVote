@@ -16,22 +16,41 @@ export default function FaceSetup() {
   const [enrollmentComplete, setEnrollmentComplete] = useState(false);
   const [capturedDescriptor, setCapturedDescriptor] = useState<Float32Array | null>(null);
 
-  // Redirect if not authenticated or face already enabled
+  // Check server for current user state and redirect if needed
   useEffect(() => {
-    if (!token || !user) {
-      toast({
-        title: "Authentication Required",
-        description: "Please log in to set up face recognition",
-        variant: "destructive",
-      });
-      navigate("/login");
-      return;
-    }
+    const checkUserStatus = async () => {
+      if (!token || !user) {
+        toast({
+          title: "Authentication Required",
+          description: "Please log in to set up face recognition",
+          variant: "destructive",
+        });
+        navigate("/login");
+        return;
+      }
+      
+      // Check server for current user state
+      try {
+        const response = await apiRequest("GET", "/api/user/me");
+        const serverUser = await response.json();
+        
+        console.log("Server user data:", serverUser);
+        console.log("Client user data:", user);
+        
+        if (serverUser.faceEnabled) {
+          toast({
+            title: "Face Recognition Already Enabled",
+            description: "Your account already has face recognition set up",
+          });
+          navigate("/dashboard");
+          return;
+        }
+      } catch (error) {
+        console.error("Failed to check user status:", error);
+      }
+    };
     
-    if (user.faceEnabled) {
-      navigate("/dashboard");
-      return;
-    }
+    checkUserStatus();
   }, [token, user, navigate, toast]);
 
   const handleFaceCapture = async (descriptor: Float32Array) => {
