@@ -150,6 +150,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           fullName: user.fullName,
           totpEnabled: user.totpEnabled,
           faceEnabled: user.faceEnabled,
+          faceDescriptor: user.faceDescriptor,
         }
       });
     } catch (error: any) {
