@@ -65,7 +65,18 @@ export default function Login() {
       });
       
     } catch (error: any) {
-      const errorData = JSON.parse(error.message.split(': ')[1] || '{}');
+      console.log("Login error:", error.message);
+      
+      let errorData: any = {};
+      try {
+        const errorText = error.message.split(': ')[1];
+        console.log("Error text to parse:", errorText);
+        errorData = JSON.parse(errorText || '{}');
+        console.log("Parsed error data:", errorData);
+      } catch (parseError) {
+        console.log("Failed to parse error data:", parseError);
+        errorData = { message: error.message };
+      }
       
       if (errorData.requiresTotp) {
         setRequiresTotp(true);
@@ -74,6 +85,13 @@ export default function Login() {
           description: "Please enter your 6-digit authenticator code",
           variant: "default",
         });
+      } else if (errorData.requiresFaceSetup) {
+        toast({
+          title: "Face Recognition Required",
+          description: "You must set up face recognition before logging in. Redirecting to setup...",
+          variant: "destructive",
+        });
+        navigate("/face-setup");
       } else {
         toast({
           title: "Login Failed",

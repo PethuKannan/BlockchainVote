@@ -19,34 +19,34 @@ export default function FaceSetup() {
   // Check server for current user state and redirect if needed
   useEffect(() => {
     const checkUserStatus = async () => {
-      if (!token || !user) {
-        toast({
-          title: "Authentication Required",
-          description: "Please log in to set up face recognition",
-          variant: "destructive",
-        });
-        navigate("/login");
-        return;
-      }
-      
-      // Check server for current user state
-      try {
-        const response = await apiRequest("GET", "/api/user/me");
-        const serverUser = await response.json();
-        
-        console.log("Server user data:", serverUser);
-        console.log("Client user data:", user);
-        
-        if (serverUser.faceEnabled) {
-          toast({
-            title: "Face Recognition Already Enabled",
-            description: "Your account already has face recognition set up",
-          });
-          navigate("/dashboard");
-          return;
+      // If user is authenticated, check their face status
+      if (token && user) {
+        try {
+          const response = await apiRequest("GET", "/api/user/me");
+          const serverUser = await response.json();
+          
+          console.log("Server user data:", serverUser);
+          console.log("Client user data:", user);
+          
+          if (serverUser.faceEnabled) {
+            toast({
+              title: "Face Recognition Already Enabled",
+              description: "Your account already has face recognition set up",
+            });
+            navigate("/dashboard");
+            return;
+          }
+        } catch (error) {
+          console.error("Failed to check user status:", error);
         }
-      } catch (error) {
-        console.error("Failed to check user status:", error);
+      } else {
+        // If not authenticated, show message about needing to complete login first
+        console.log("User not authenticated - need to complete login with credentials first");
+        toast({
+          title: "Complete Login First",
+          description: "Please log in with your username and password first, then you'll be prompted to set up face recognition",
+          variant: "default",
+        });
       }
     };
     
@@ -162,8 +162,48 @@ export default function FaceSetup() {
     navigate("/dashboard");
   };
 
+  // Show different content for unauthenticated users
   if (!user || !token) {
-    return null;
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center p-4">
+        <Card className="w-full max-w-md">
+          <CardContent className="pt-6">
+            <div className="text-center mb-6">
+              <div className="w-12 h-12 bg-primary rounded-lg flex items-center justify-center mx-auto mb-4">
+                <i className="fas fa-user-check text-primary-foreground text-xl"></i>
+              </div>
+              <h1 className="text-2xl font-bold text-foreground">Face Recognition Setup Required</h1>
+              <p className="text-sm text-muted-foreground mt-2">
+                You need to complete login first before setting up face recognition
+              </p>
+            </div>
+            
+            <div className="space-y-4">
+              <div className="bg-accent rounded-lg p-4">
+                <h3 className="text-sm font-semibold text-foreground mb-2">
+                  <i className="fas fa-info-circle text-primary mr-2"></i>
+                  Setup Process
+                </h3>
+                <p className="text-xs text-muted-foreground">
+                  1. Log in with your username and password<br/>
+                  2. Enter your authenticator code if prompted<br/>
+                  3. Complete face recognition setup
+                </p>
+              </div>
+              
+              <Button
+                onClick={() => navigate("/login")}
+                className="w-full"
+                data-testid="button-go-to-login"
+              >
+                <i className="fas fa-arrow-left mr-2"></i>
+                Go to Login
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
   }
 
   return (
