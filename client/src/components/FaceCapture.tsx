@@ -26,6 +26,8 @@ export default function FaceCapture({
   const [captureStatus, setCaptureStatus] = useState<'idle' | 'detecting' | 'captured' | 'error'>('idle');
   const [enrollmentTriggered, setEnrollmentTriggered] = useState(false);
   const [verificationTriggered, setVerificationTriggered] = useState(false);
+  const [detectionQuality, setDetectionQuality] = useState(0);
+  const [stableDetectionCount, setStableDetectionCount] = useState(0);
   
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -100,9 +102,10 @@ export default function FaceCapture({
       console.log('Requesting camera access...');
       const stream = await navigator.mediaDevices.getUserMedia({
         video: {
-          width: { ideal: 640 },
-          height: { ideal: 480 },
-          facingMode: 'user'
+          width: { ideal: 1280, min: 640 },
+          height: { ideal: 720, min: 480 },
+          facingMode: 'user',
+          frameRate: { ideal: 30, min: 15 }
         }
       });
 
@@ -246,40 +249,46 @@ export default function FaceCapture({
       try {
         console.log('Running face detection...');
         
-        // Try multiple detection methods
-        let simpleDetections: any[] = [];
-        
-        // Try TinyFaceDetector first (more sensitive)
-        try {
-          simpleDetections = await faceapi
-            .detectAllFaces(video, new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.3 }));
-          console.log(`TinyFaceDetector found ${simpleDetections.length} faces`);
-        } catch (tinyError) {
-          console.log('TinyFaceDetector failed, trying SsdMobilenet...', tinyError);
-          
-          // Fallback to SsdMobilenet
-          simpleDetections = await faceapi
-            .detectAllFaces(video, new faceapi.SsdMobilenetv1Options({ minConfidence: 0.3 }));
-          console.log(`SsdMobilenet found ${simpleDetections.length} faces`);
-        }
-
+        // Multi-tier detection strategy for better reliability
         let detections: any[] = [];
-        if (simpleDetections.length > 0) {
-          // If we found faces with simple detection, then get full data
-          try {
-            detections = await faceapi
-              .detectAllFaces(video, new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.3 }))
-              .withFaceLandmarks()
-              .withFaceDescriptors();
-            console.log(`TinyFaceDetector full detection found ${detections.length} faces`);
-          } catch (fullError) {
-            console.log('TinyFaceDetector full detection failed, using SsdMobilenet...', fullError);
-            detections = await faceapi
-              .detectAllFaces(video, new faceapi.SsdMobilenetv1Options({ minConfidence: 0.3 }))
-              .withFaceLandmarks()
-              .withFaceDescriptors();
-            console.log(`SsdMobilenet full detection found ${detections.length} faces`);
+        let detectionAttempts = 0;
+        const maxAttempts = 3;
+        
+        // Try multiple detection configurations with different sensitivities
+        const detectionConfigs = [
+          { 
+            name: 'TinyFaceDetector_High',
+            options: new faceapi.TinyFaceDetectorOptions({ inputSize: 416, scoreThreshold: 0.25 })
+          },
+          { 
+            name: 'TinyFaceDetector_Medium',
+            options: new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.35 })
+          },
+          { 
+            name: 'SsdMobilenet_Sensitive',
+            options: new faceapi.SsdMobilenetv1Options({ minConfidence: 0.25 })
           }
+        ];
+
+        for (const config of detectionConfigs) {
+          if (detections.length > 0) break;
+          
+          try {
+            // console.log(`Trying ${config.name}...`);
+            detections = await faceapi
+              .detectAllFaces(video, config.options)
+              .withFaceLandmarks()
+              .withFaceDescriptors();
+            
+            if (detections.length > 0) {
+              console.log(`${config.name} found ${detections.length} faces with confidence: ${detections[0].detection.score}`);
+              break;
+            }
+          } catch (error) {
+            console.log(`${config.name} failed:`, error);
+          }
+          
+          detectionAttempts++;
         }
 
         // Clear canvas
@@ -288,61 +297,83 @@ export default function FaceCapture({
         }
 
         if (detections.length > 0) {
-          setFaceDetected(true);
-          console.log('Face detected with confidence:', detections[0].detection.score);
+          const bestDetection = detections.reduce((best, current) => 
+            current.detection.score > best.detection.score ? current : best
+          );
           
-          // Draw detection boxes
-          detections.forEach(detection => {
-            const { x, y, width, height } = detection.detection.box;
-            if (ctx) {
-              ctx.strokeStyle = '#00ff00';
-              ctx.lineWidth = 2;
-              ctx.strokeRect(x, y, width, height);
-              
-              // Draw confidence
-              ctx.fillStyle = '#00ff00';
-              ctx.font = '16px Arial';
-              ctx.fillText(
-                `${Math.round(detection.detection.score * 100)}%`,
-                x, y - 10
-              );
-            }
-          });
-
-          // If we have exactly one face, we can proceed
-          if (detections.length === 1) {
-            const detection = detections[0];
+          const confidence = bestDetection.detection.score;
+          const minConfidenceThreshold = 0.4;
+          
+          if (confidence >= minConfidenceThreshold) {
+            setFaceDetected(true);
+            setDetectionQuality(confidence);
+            setStableDetectionCount(prev => prev + 1);
             
-            if (mode === "enroll" && onFaceCapture && !enrollmentTriggered) {
-              // For enrollment, capture the face descriptor (only once)
-              console.log("Triggering face enrollment (first time)");
-              setEnrollmentTriggered(true);
-              onFaceCapture(detection.descriptor);
-              setCaptureStatus('captured');
-              stopCamera();
-            } else if (mode === "verify" && onVerificationResult && existingDescriptor && !verificationTriggered) {
-              // For verification, compare with existing descriptor (only once)
-              console.log("Triggering face verification (first time)");
-              setVerificationTriggered(true);
+            console.log(`High quality face detected - confidence: ${confidence.toFixed(3)}, stable count: ${stableDetectionCount + 1}`);
+            
+            // Draw detection boxes with color based on quality
+            detections.forEach(detection => {
+              const { x, y, width, height } = detection.detection.box;
+              if (ctx) {
+                const detectionConf = detection.detection.score;
+                const quality = detectionConf >= 0.6 ? 'excellent' : detectionConf >= 0.5 ? 'good' : 'fair';
+                
+                // Color based on quality
+                ctx.strokeStyle = detectionConf >= 0.6 ? '#00ff00' : detectionConf >= 0.5 ? '#ffff00' : '#ffa500';
+                ctx.lineWidth = 3;
+                ctx.strokeRect(x, y, width, height);
+                
+                // Draw confidence and quality
+                ctx.fillStyle = ctx.strokeStyle;
+                ctx.font = 'bold 16px Arial';
+                ctx.fillText(
+                  `${Math.round(detectionConf * 100)}% (${quality})`,
+                  x, y - 10
+                );
+              }
+            });
+
+            // Require stable detection for reliable capture (at least 3 consecutive good detections)
+            const requiredStability = mode === 'enroll' ? 5 : 3;
+            if (detections.length === 1 && stableDetectionCount >= requiredStability) {
+              const detection = detections[0];
               
-              const distance = faceapi.euclideanDistance(
-                detection.descriptor,
-                new Float32Array(existingDescriptor)
-              );
-              
-              // Lower distance means better match (threshold ~0.6 is typical)
-              const isMatch = distance < 0.6;
-              const confidence = Math.max(0, (1 - distance) * 100);
-              
-              console.log("Face verification result:", { isMatch, confidence, distance });
-              
-              onVerificationResult(isMatch, confidence);
-              setCaptureStatus(isMatch ? 'captured' : 'error');
-              stopCamera();
+              if (mode === "enroll" && onFaceCapture && !enrollmentTriggered) {
+                console.log(`Triggering face enrollment after ${stableDetectionCount} stable detections`);
+                setEnrollmentTriggered(true);
+                onFaceCapture(detection.descriptor);
+                setCaptureStatus('captured');
+                stopCamera();
+              } else if (mode === "verify" && onVerificationResult && existingDescriptor && !verificationTriggered) {
+                // For verification, compare with existing descriptor (only once)
+                console.log("Triggering face verification (first time)");
+                setVerificationTriggered(true);
+                
+                const distance = faceapi.euclideanDistance(
+                  detection.descriptor,
+                  new Float32Array(existingDescriptor)
+                );
+                
+                // Lower distance means better match (threshold ~0.6 is typical)
+                const isMatch = distance < 0.6;
+                const confidence = Math.max(0, (1 - distance) * 100);
+                
+                console.log("Face verification result:", { isMatch, confidence, distance });
+                
+                onVerificationResult(isMatch, confidence);
+                setCaptureStatus(isMatch ? 'captured' : 'error');
+                stopCamera();
+              }
             }
+          } else {
+            // Reset stable detection count if confidence is too low
+            setFaceDetected(false);
+            setStableDetectionCount(0);
+            console.log(`Low confidence face detected: ${confidence.toFixed(3)} < ${minConfidenceThreshold}`);
           }
         } else {
           setFaceDetected(false);
+          setStableDetectionCount(0);
           console.log('No face detected in current frame');
           
           // Draw "no face detected" message
@@ -357,9 +388,9 @@ export default function FaceCapture({
       }
     };
 
-    // Start detection loop
+    // Start detection loop with optimized timing
     console.log('Setting up detection interval...');
-    detectionIntervalRef.current = window.setInterval(detectFaces, 100);
+    detectionIntervalRef.current = window.setInterval(detectFaces, 150);
   };
 
   // Stop camera and cleanup
@@ -390,9 +421,12 @@ export default function FaceCapture({
       case 'idle':
         return mode === 'enroll' ? 'Ready to capture your face for registration' : 'Ready to verify your identity';
       case 'detecting':
-        return faceDetected 
-          ? 'Face detected! Hold still...' 
-          : 'Please position your face in the camera view';
+        if (faceDetected) {
+          const qualityText = detectionQuality >= 0.6 ? 'excellent' : detectionQuality >= 0.5 ? 'good' : 'fair';
+          const requiredStability = mode === 'enroll' ? 5 : 3;
+          return `Face detected (${qualityText} quality)! Hold still... ${stableDetectionCount}/${requiredStability} stable frames`;
+        }
+        return 'Please position your face in the camera view';
       case 'captured':
         return mode === 'enroll' ? 'Face captured successfully!' : 'Face verified successfully!';
       case 'error':
