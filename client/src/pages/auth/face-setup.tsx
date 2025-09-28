@@ -35,6 +35,11 @@ export default function FaceSetup() {
   }, [token, user, navigate, toast]);
 
   const handleFaceCapture = async (descriptor: Float32Array) => {
+    // Prevent multiple enrollment attempts
+    if (isEnrolling || enrollmentComplete) {
+      return;
+    }
+
     try {
       setIsEnrolling(true);
       setCapturedDescriptor(descriptor);
@@ -42,6 +47,17 @@ export default function FaceSetup() {
       // Check if we have a valid token
       if (!token) {
         throw new Error("You need to be logged in to enroll face recognition");
+      }
+      
+      // Check if face is already enabled
+      if (user?.faceEnabled) {
+        toast({
+          title: "Already Enrolled",
+          description: "Face recognition is already enabled for your account",
+          variant: "destructive",
+        });
+        navigate("/dashboard");
+        return;
       }
       
       // Convert Float32Array to regular array for JSON serialization
@@ -55,8 +71,20 @@ export default function FaceSetup() {
       });
       
       if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Enrollment failed: ${errorText}`);
+        const errorData = await response.json().catch(() => ({}));
+        const errorMessage = errorData.message || "Unknown error occurred";
+        
+        // Handle specific error for already enabled
+        if (errorMessage.includes("already enabled")) {
+          toast({
+            title: "Already Enrolled",
+            description: "Face recognition is already enabled for your account",
+          });
+          navigate("/dashboard");
+          return;
+        }
+        
+        throw new Error(errorMessage);
       }
       
       const result = await response.json();
@@ -67,6 +95,11 @@ export default function FaceSetup() {
         title: "Success!",
         description: "Face recognition has been enabled for your account",
       });
+      
+      // Auto-complete after success
+      setTimeout(() => {
+        completeFaceSetup();
+      }, 2000);
       
     } catch (error: any) {
       console.error("Face enrollment error:", error);
