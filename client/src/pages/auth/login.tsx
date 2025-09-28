@@ -65,16 +65,11 @@ export default function Login() {
       });
       
     } catch (error: any) {
-      console.log("Login error:", error.message);
-      
       let errorData: any = {};
       try {
         const errorText = error.message.split(': ')[1];
-        console.log("Error text to parse:", errorText);
         errorData = JSON.parse(errorText || '{}');
-        console.log("Parsed error data:", errorData);
       } catch (parseError) {
-        console.log("Failed to parse error data:", parseError);
         errorData = { message: error.message };
       }
       
