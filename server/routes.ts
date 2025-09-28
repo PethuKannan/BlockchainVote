@@ -353,6 +353,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const user = req.user;
       const { electionId, candidateId } = voteSchema.parse(req.body);
       
+      // Check if user has completed all required authentication setup
+      if (!user.totpEnabled) {
+        return res.status(403).json({ 
+          message: "TOTP authentication must be enabled before voting. Please complete 2FA setup." 
+        });
+      }
+      
+      if (!user.faceEnabled) {
+        return res.status(403).json({ 
+          message: "Face recognition must be enabled before voting. Please complete face authentication setup." 
+        });
+      }
+      
       // Check if election exists and is active
       const election = await storage.getElection(electionId);
       if (!election) {

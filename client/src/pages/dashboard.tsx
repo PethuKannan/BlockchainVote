@@ -27,6 +27,25 @@ export default function Dashboard() {
   const electionsList = Array.isArray(elections) ? elections : [];
 
   const voteForCandidate = async (electionId: string, candidateId: string) => {
+    // Check authentication requirements before voting
+    if (!user?.totpEnabled) {
+      toast({
+        title: "2FA Required",
+        description: "You must enable TOTP authentication before voting. Please complete setup.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    if (!user?.faceEnabled) {
+      toast({
+        title: "Face Recognition Required", 
+        description: "You must enable face recognition before voting. Please complete setup.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
     try {
       const response = await apiRequest("POST", "/api/vote", {
         electionId,
@@ -50,6 +69,9 @@ export default function Dashboard() {
       });
     }
   };
+
+  // Check if user can vote (has both TOTP and face authentication)
+  const canVote = user?.totpEnabled && user?.faceEnabled;
 
   return (
     <div className="min-h-screen bg-background">
@@ -175,7 +197,7 @@ export default function Dashboard() {
                           <div key={candidate.id} className="bg-muted/30 rounded-lg p-4">
                             <h5 className="font-medium text-foreground">{candidate.name}</h5>
                             <p className="text-sm text-muted-foreground mb-3">{candidate.party}</p>
-                            {election.isActive && (
+                            {election.isActive && canVote && (
                               <Button
                                 size="sm"
                                 onClick={() => voteForCandidate(election.id, candidate.id)}
@@ -183,6 +205,17 @@ export default function Dashboard() {
                               >
                                 Vote
                               </Button>
+                            )}
+                            {election.isActive && !canVote && (
+                              <div className="text-xs text-muted-foreground">
+                                {!user?.totpEnabled && !user?.faceEnabled ? (
+                                  <span>Complete 2FA and face setup to vote</span>
+                                ) : !user?.totpEnabled ? (
+                                  <span>Complete 2FA setup to vote</span>
+                                ) : (
+                                  <span>Complete face setup to vote</span>
+                                )}
+                              </div>
                             )}
                           </div>
                         ))}
