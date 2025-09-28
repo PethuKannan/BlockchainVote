@@ -38,7 +38,9 @@ export default function FaceCapture({
   useEffect(() => {
     const loadModels = async () => {
       try {
+        console.log('Starting to load face-api.js models...');
         setIsLoading(true);
+        setIsModelLoaded(false);
         
         // Use CDN for models since we don't have local models set up
         const MODEL_URL = 'https://justadudewhohacks.github.io/face-api.js/models';
@@ -49,16 +51,18 @@ export default function FaceCapture({
           faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL),
         ]);
         
-        setIsModelLoaded(true);
         console.log('Face-api.js models loaded successfully');
+        setIsModelLoaded(true);
       } catch (error) {
         console.error('Error loading face-api.js models:', error);
+        setIsModelLoaded(false);
         toast({
           title: "Model Loading Failed",
           description: "Failed to load face recognition models. Please refresh and try again.",
           variant: "destructive",
         });
       } finally {
+        console.log('Finished loading models, setting isLoading to false');
         setIsLoading(false);
       }
     };
@@ -417,10 +421,11 @@ export default function FaceCapture({
           {/* Loading/Error overlay */}
           {!isVideoStarted && (
             <div className="absolute inset-0 flex items-center justify-center bg-gray-900/90 z-10">
-              {isLoading ? (
+              {isLoading && !isModelLoaded ? (
                 <div className="text-center text-white">
                   <i className="fas fa-spinner fa-spin text-3xl mb-3"></i>
                   <p className="text-lg">Loading face detection models...</p>
+                  <p className="text-sm opacity-75">This may take a few moments</p>
                 </div>
               ) : captureStatus === 'error' ? (
                 <div className="text-center text-red-400">
@@ -428,10 +433,16 @@ export default function FaceCapture({
                   <p className="text-lg">Camera Error</p>
                   <p className="text-sm opacity-75">Check camera permissions</p>
                 </div>
+              ) : !isModelLoaded ? (
+                <div className="text-center text-yellow-400">
+                  <i className="fas fa-exclamation-triangle text-3xl mb-3"></i>
+                  <p className="text-lg">Models Failed to Load</p>
+                  <p className="text-sm opacity-75">Please refresh the page and try again</p>
+                </div>
               ) : (
                 <div className="text-center text-gray-400">
                   <i className="fas fa-video text-4xl mb-4"></i>
-                  <p className="text-lg">Ready to start camera</p>
+                  <p className="text-lg">Face detection ready</p>
                   <p className="text-sm opacity-75">Click "Start Camera" to begin</p>
                 </div>
               )}
