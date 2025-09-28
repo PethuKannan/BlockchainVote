@@ -18,8 +18,8 @@ export default function Login() {
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
   const [requiresTotp, setRequiresTotp] = useState(false);
-  const [showFaceLogin, setShowFaceLogin] = useState(false);
-  const [faceLoginUsername, setFaceLoginUsername] = useState("");
+  const [showFaceVerification, setShowFaceVerification] = useState(false);
+  const [pendingAuthData, setPendingAuthData] = useState<any>(null);
 
   // Redirect if already authenticated - use useEffect to avoid render loops
   useEffect(() => {
@@ -40,17 +40,30 @@ export default function Login() {
   const onSubmit = async (data: LoginData) => {
     setIsLoading(true);
     try {
+      // First validate username/password (and TOTP if required)
       const response = await apiRequest("POST", "/api/auth/login", data);
       const result = await response.json();
       
-      login(result.token, result.user);
+      // Check if user has face recognition enabled
+      if (!result.user.faceEnabled) {
+        toast({
+          title: "Face Recognition Required",
+          description: "You must set up face recognition before logging in. Redirecting to setup...",
+          variant: "destructive",
+        });
+        navigate("/face-setup");
+        return;
+      }
+      
+      // Store pending auth data and require face verification
+      setPendingAuthData({ token: result.token, user: result.user });
+      setShowFaceVerification(true);
       
       toast({
-        title: "Success",
-        description: "Welcome back!",
+        title: "Password Verified",
+        description: "Now please complete face verification to finish login",
       });
       
-      navigate("/dashboard");
     } catch (error: any) {
       const errorData = JSON.parse(error.message.split(': ')[1] || '{}');
       
@@ -73,109 +86,86 @@ export default function Login() {
     }
   };
 
-  const handleFaceVerification = async (isMatch: boolean, confidence: number) => {
-    if (isMatch) {
-      toast({
-        title: "Face Verified",
-        description: `Face recognition successful (${confidence}% confidence)`,
-      });
-      setShowFaceLogin(false);
-    } else {
-      toast({
-        title: "Face Verification Failed",
-        description: `Face not recognized (${confidence}% confidence)`,
-        variant: "destructive",
-      });
-    }
-  };
-
-  const startFaceLogin = () => {
-    const username = form.getValues("username");
-    if (!username) {
-      toast({
-        title: "Username Required",
-        description: "Please enter your username first for face verification",
-        variant: "destructive",
-      });
-      return;
-    }
-    
-    setFaceLoginUsername(username);
-    setShowFaceLogin(true);
-  };
-
-  const handleFaceLoginResult = async (descriptor: Float32Array) => {
+  const handleFaceVerification = async (descriptor: Float32Array) => {
     try {
       setIsLoading(true);
       
+      if (!pendingAuthData) {
+        toast({
+          title: "Error",
+          description: "Authentication session expired. Please try again.",
+          variant: "destructive",
+        });
+        setShowFaceVerification(false);
+        return;
+      }
+      
+      // Verify face with server
       const descriptorArray = Array.from(descriptor);
       const response = await apiRequest("POST", "/api/auth/verify-face", {
-        username: faceLoginUsername,
+        username: form.getValues("username"),
         faceDescriptor: descriptorArray
       });
       
       const result = await response.json();
       
       if (result.isMatch) {
-        login(result.token, result.user);
+        // Complete login with the previously validated credentials
+        login(pendingAuthData.token, pendingAuthData.user);
         
         toast({
-          title: "Face Login Successful",
-          description: `Welcome back! (${result.confidence}% confidence)`,
+          title: "Login Successful!",
+          description: `All authentication factors verified (${result.confidence}% face confidence)`,
         });
         
         navigate("/dashboard");
+      } else {
+        toast({
+          title: "Face Verification Failed",
+          description: `Face does not match (${result.confidence}% confidence). Please try again.`,
+          variant: "destructive",
+        });
       }
+      
     } catch (error: any) {
       const errorData = JSON.parse(error.message.split(': ')[1] || '{}');
       toast({
-        title: "Face Login Failed",
-        description: errorData.message || "Face verification failed",
+        title: "Face Verification Error",
+        description: errorData.message || "Face verification failed. Please try again.",
         variant: "destructive",
       });
     } finally {
       setIsLoading(false);
-      setShowFaceLogin(false);
+      setShowFaceVerification(false);
+      setPendingAuthData(null);
     }
   };
 
-  // Handle escape key and cleanup for face login modal
-  useEffect(() => {
-    const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && showFaceLogin) {
-        setShowFaceLogin(false);
-      }
-    };
+  const cancelFaceVerification = () => {
+    setShowFaceVerification(false);
+    setPendingAuthData(null);
+    toast({
+      title: "Login Cancelled",
+      description: "Face verification cancelled. Please log in again.",
+      variant: "default",
+    });
+  };
 
-    if (showFaceLogin) {
-      document.addEventListener('keydown', handleEscape);
-      // Prevent body scroll when modal is open
-      document.body.style.overflow = 'hidden';
-    }
-
-    return () => {
-      document.removeEventListener('keydown', handleEscape);
-      document.body.style.overflow = 'unset';
-    };
-  }, [showFaceLogin]);
 
   return (
     <div className="min-h-screen bg-background flex items-center justify-center p-4">
       <div className="w-full max-w-md">
         
-        {/* Face Login Modal */}
-        {showFaceLogin && (
+        {/* Face Verification Modal */}
+        {showFaceVerification && (
           <div 
             className="fixed inset-0 z-50"
-            data-testid="face-login-backdrop"
+            data-testid="face-verification-backdrop"
           >
             {/* Backdrop overlay */}
             <div 
               className="absolute inset-0 bg-black/50"
-              onClick={() => {
-                console.log('Backdrop overlay clicked - closing modal');
-                setShowFaceLogin(false);
-              }}
+              onClick={cancelFaceVerification}
             />
             
             {/* Modal container */}
@@ -185,22 +175,25 @@ export default function Login() {
                 onClick={(e) => e.stopPropagation()}
               >
                 <div className="p-4 border-b border-border">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-lg font-semibold">Face Recognition Login</h3>
-                  <button 
-                    onClick={() => setShowFaceLogin(false)}
-                    className="text-muted-foreground hover:text-foreground p-2 -m-2 rounded-md hover:bg-muted transition-colors"
-                    data-testid="button-close-face-login"
-                    aria-label="Close modal"
-                  >
-                    <i className="fas fa-times text-lg"></i>
-                  </button>
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-lg font-semibold">Complete Face Verification</h3>
+                    <button 
+                      onClick={cancelFaceVerification}
+                      className="text-muted-foreground hover:text-foreground p-2 -m-2 rounded-md hover:bg-muted transition-colors"
+                      data-testid="button-close-face-verification"
+                      aria-label="Cancel verification"
+                    >
+                      <i className="fas fa-times text-lg"></i>
+                    </button>
+                  </div>
+                  <p className="text-sm text-muted-foreground mt-2">
+                    Step 2 of 2: Please look at the camera to complete your login
+                  </p>
                 </div>
-              </div>
                 <div className="p-4">
                   <FaceCapture
-                    mode="enroll"
-                    onFaceCapture={handleFaceLoginResult}
+                    mode="verify"
+                    onFaceCapture={handleFaceVerification}
                   />
                 </div>
               </div>
@@ -289,29 +282,6 @@ export default function Login() {
               </Button>
             </form>
 
-            {/* Face Login Alternative */}
-            <div className="mt-6 text-center">
-              <div className="relative">
-                <div className="absolute inset-0 flex items-center">
-                  <div className="w-full border-t border-border"></div>
-                </div>
-                <div className="relative flex justify-center text-xs uppercase">
-                  <span className="bg-background px-2 text-muted-foreground">Or</span>
-                </div>
-              </div>
-              
-              <Button
-                type="button"
-                variant="outline"
-                className="w-full mt-4"
-                onClick={startFaceLogin}
-                disabled={isLoading}
-                data-testid="button-face-login"
-              >
-                <i className="fas fa-user-check mr-2"></i>
-                Login with Face Recognition
-              </Button>
-            </div>
 
             <div className="mt-6 text-center">
               <p className="text-sm text-muted-foreground">
