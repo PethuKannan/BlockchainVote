@@ -24,6 +24,7 @@ export default function FaceCapture({
   const [isVideoStarted, setIsVideoStarted] = useState(false);
   const [faceDetected, setFaceDetected] = useState(false);
   const [captureStatus, setCaptureStatus] = useState<'idle' | 'detecting' | 'captured' | 'error'>('idle');
+  const [enrollmentTriggered, setEnrollmentTriggered] = useState(false);
   
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -127,6 +128,7 @@ export default function FaceCapture({
         });
         setIsVideoStarted(true);
         setCaptureStatus('detecting');
+        setEnrollmentTriggered(false); // Reset enrollment flag when video starts
         
         // Start face detection after a short delay to ensure video is playing
         setTimeout(() => {
@@ -253,8 +255,10 @@ export default function FaceCapture({
           if (detections.length === 1) {
             const detection = detections[0];
             
-            if (mode === "enroll" && onFaceCapture) {
-              // For enrollment, capture the face descriptor
+            if (mode === "enroll" && onFaceCapture && !enrollmentTriggered) {
+              // For enrollment, capture the face descriptor (only once)
+              console.log("Triggering face enrollment (first time)");
+              setEnrollmentTriggered(true);
               onFaceCapture(detection.descriptor);
               setCaptureStatus('captured');
               stopCamera();
