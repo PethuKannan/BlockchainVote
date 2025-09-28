@@ -212,24 +212,44 @@ export default function FaceCapture({
 
   // Start face detection loop
   const startFaceDetection = () => {
-    if (!videoRef.current || !canvasRef.current) return;
+    console.log('Starting face detection...');
+    if (!videoRef.current || !canvasRef.current) {
+      console.log('Missing video or canvas ref');
+      return;
+    }
 
     const video = videoRef.current;
     const canvas = canvasRef.current;
     const ctx = canvas.getContext('2d');
+
+    console.log('Video dimensions:', {
+      videoWidth: video.videoWidth,
+      videoHeight: video.videoHeight,
+      readyState: video.readyState
+    });
 
     // Set canvas dimensions to match video
     canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
 
     const detectFaces = async () => {
-      if (!video || video.paused || video.ended) return;
+      if (!video || video.paused || video.ended) {
+        console.log('Video not ready:', {
+          video: !!video,
+          paused: video?.paused,
+          ended: video?.ended
+        });
+        return;
+      }
 
       try {
+        console.log('Running face detection...');
         const detections = await faceapi
-          .detectAllFaces(video)
+          .detectAllFaces(video, new faceapi.SsdMobilenetv1Options({ minConfidence: 0.5 }))
           .withFaceLandmarks()
           .withFaceDescriptors();
+
+        console.log(`Found ${detections.length} faces`);
 
         // Clear canvas
         if (ctx) {
@@ -238,6 +258,7 @@ export default function FaceCapture({
 
         if (detections.length > 0) {
           setFaceDetected(true);
+          console.log('Face detected with confidence:', detections[0].detection.score);
           
           // Draw detection boxes
           detections.forEach(detection => {
@@ -291,6 +312,7 @@ export default function FaceCapture({
           }
         } else {
           setFaceDetected(false);
+          console.log('No face detected in current frame');
           
           // Draw "no face detected" message
           if (ctx) {
@@ -305,6 +327,7 @@ export default function FaceCapture({
     };
 
     // Start detection loop
+    console.log('Setting up detection interval...');
     detectionIntervalRef.current = window.setInterval(detectFaces, 100);
   };
 
