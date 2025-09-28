@@ -47,6 +47,7 @@ export default function FaceCapture({
         
         await Promise.all([
           faceapi.nets.ssdMobilenetv1.loadFromUri(MODEL_URL),
+          faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
           faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
           faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL),
         ]);
@@ -244,12 +245,42 @@ export default function FaceCapture({
 
       try {
         console.log('Running face detection...');
-        const detections = await faceapi
-          .detectAllFaces(video, new faceapi.SsdMobilenetv1Options({ minConfidence: 0.5 }))
-          .withFaceLandmarks()
-          .withFaceDescriptors();
+        
+        // Try multiple detection methods
+        let simpleDetections: any[] = [];
+        
+        // Try TinyFaceDetector first (more sensitive)
+        try {
+          simpleDetections = await faceapi
+            .detectAllFaces(video, new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.3 }));
+          console.log(`TinyFaceDetector found ${simpleDetections.length} faces`);
+        } catch (tinyError) {
+          console.log('TinyFaceDetector failed, trying SsdMobilenet...', tinyError);
+          
+          // Fallback to SsdMobilenet
+          simpleDetections = await faceapi
+            .detectAllFaces(video, new faceapi.SsdMobilenetv1Options({ minConfidence: 0.3 }));
+          console.log(`SsdMobilenet found ${simpleDetections.length} faces`);
+        }
 
-        console.log(`Found ${detections.length} faces`);
+        let detections: any[] = [];
+        if (simpleDetections.length > 0) {
+          // If we found faces with simple detection, then get full data
+          try {
+            detections = await faceapi
+              .detectAllFaces(video, new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.3 }))
+              .withFaceLandmarks()
+              .withFaceDescriptors();
+            console.log(`TinyFaceDetector full detection found ${detections.length} faces`);
+          } catch (fullError) {
+            console.log('TinyFaceDetector full detection failed, using SsdMobilenet...', fullError);
+            detections = await faceapi
+              .detectAllFaces(video, new faceapi.SsdMobilenetv1Options({ minConfidence: 0.3 }))
+              .withFaceLandmarks()
+              .withFaceDescriptors();
+            console.log(`SsdMobilenet full detection found ${detections.length} faces`);
+          }
+        }
 
         // Clear canvas
         if (ctx) {
