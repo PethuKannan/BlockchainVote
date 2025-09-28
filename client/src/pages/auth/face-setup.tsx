@@ -19,6 +19,11 @@ export default function FaceSetup() {
   // Redirect if not authenticated or face already enabled
   useEffect(() => {
     if (!token || !user) {
+      toast({
+        title: "Authentication Required",
+        description: "Please log in to set up face recognition",
+        variant: "destructive",
+      });
       navigate("/login");
       return;
     }
@@ -27,19 +32,32 @@ export default function FaceSetup() {
       navigate("/dashboard");
       return;
     }
-  }, [token, user, navigate]);
+  }, [token, user, navigate, toast]);
 
   const handleFaceCapture = async (descriptor: Float32Array) => {
     try {
       setIsEnrolling(true);
       setCapturedDescriptor(descriptor);
       
+      // Check if we have a valid token
+      if (!token) {
+        throw new Error("You need to be logged in to enroll face recognition");
+      }
+      
       // Convert Float32Array to regular array for JSON serialization
       const descriptorArray = Array.from(descriptor);
+      
+      console.log("Enrolling face with token:", token ? "present" : "missing");
+      console.log("User ID:", user?.id);
       
       const response = await apiRequest("POST", "/api/auth/enroll-face", {
         faceDescriptor: descriptorArray
       });
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Enrollment failed: ${errorText}`);
+      }
       
       const result = await response.json();
       
@@ -51,6 +69,19 @@ export default function FaceSetup() {
       });
       
     } catch (error: any) {
+      console.error("Face enrollment error:", error);
+      
+      // If authentication error, redirect to login
+      if (error.message.includes("401") || error.message.includes("Invalid token")) {
+        toast({
+          title: "Authentication Required",
+          description: "Please log in again to access face enrollment",
+          variant: "destructive",
+        });
+        navigate("/login");
+        return;
+      }
+      
       toast({
         title: "Enrollment Failed",
         description: error.message || "Failed to enroll face. Please try again.",
