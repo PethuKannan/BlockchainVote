@@ -358,18 +358,18 @@ export default function FaceCapture({
 
             // Require stable detection for reliable capture (at least 3 consecutive good detections)
             const requiredStability = mode === 'enroll' ? 5 : 3;
-            if (detections.length === 1 && stableCountRef.current >= requiredStability) {
-              const detection = detections[0];
+            if (stableCountRef.current >= requiredStability) {
+              const detection = bestDetection;
               
               if (mode === "enroll" && onFaceCapture && !enrollmentTriggered) {
-                console.log(`Triggering face enrollment after ${stableCountRef.current} stable detections`);
+                console.log(`✅ Triggering face enrollment after ${stableCountRef.current} stable detections`);
                 setEnrollmentTriggered(true);
                 onFaceCapture(detection.descriptor);
                 setCaptureStatus('captured');
                 stopCamera();
               } else if (mode === "verify" && onVerificationResult && existingDescriptor && !verificationTriggered) {
                 // For verification, compare with existing descriptor (only once)
-                console.log("Triggering face verification (first time)");
+                console.log("🔍 Triggering face verification - threshold reached!");
                 setVerificationTriggered(true);
                 
                 const distance = faceapi.euclideanDistance(
@@ -381,7 +381,7 @@ export default function FaceCapture({
                 const isMatch = distance < 0.6;
                 const confidence = Math.max(0, (1 - distance) * 100);
                 
-                console.log("Face verification result:", { isMatch, confidence, distance });
+                console.log("🎯 Face verification result:", { isMatch, confidence: confidence.toFixed(1), distance: distance.toFixed(3) });
                 
                 onVerificationResult(isMatch, confidence);
                 setCaptureStatus(isMatch ? 'captured' : 'error');
