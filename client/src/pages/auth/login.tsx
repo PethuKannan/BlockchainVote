@@ -139,31 +139,70 @@ export default function Login() {
     }
   };
 
+  // Handle escape key and cleanup for face login modal
+  useEffect(() => {
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && showFaceLogin) {
+        setShowFaceLogin(false);
+      }
+    };
+
+    if (showFaceLogin) {
+      document.addEventListener('keydown', handleEscape);
+      // Prevent body scroll when modal is open
+      document.body.style.overflow = 'hidden';
+    }
+
+    return () => {
+      document.removeEventListener('keydown', handleEscape);
+      document.body.style.overflow = 'unset';
+    };
+  }, [showFaceLogin]);
+
   return (
     <div className="min-h-screen bg-background flex items-center justify-center p-4">
       <div className="w-full max-w-md">
         
         {/* Face Login Modal */}
         {showFaceLogin && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <div className="bg-background rounded-lg max-w-lg w-full">
-              <div className="p-4 border-b border-border">
+          <div 
+            className="fixed inset-0 z-50"
+            data-testid="face-login-backdrop"
+          >
+            {/* Backdrop overlay */}
+            <div 
+              className="absolute inset-0 bg-black/50"
+              onClick={() => {
+                console.log('Backdrop overlay clicked - closing modal');
+                setShowFaceLogin(false);
+              }}
+            />
+            
+            {/* Modal container */}
+            <div className="relative h-full flex items-center justify-center p-4">
+              <div 
+                className="bg-background rounded-lg max-w-lg w-full max-h-[90vh] overflow-auto shadow-xl"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="p-4 border-b border-border">
                 <div className="flex items-center justify-between">
                   <h3 className="text-lg font-semibold">Face Recognition Login</h3>
                   <button 
                     onClick={() => setShowFaceLogin(false)}
-                    className="text-muted-foreground hover:text-foreground"
+                    className="text-muted-foreground hover:text-foreground p-2 -m-2 rounded-md hover:bg-muted transition-colors"
                     data-testid="button-close-face-login"
+                    aria-label="Close modal"
                   >
-                    <i className="fas fa-times"></i>
+                    <i className="fas fa-times text-lg"></i>
                   </button>
                 </div>
               </div>
-              <div className="p-4">
-                <FaceCapture
-                  mode="enroll"
-                  onFaceCapture={handleFaceLoginResult}
-                />
+                <div className="p-4">
+                  <FaceCapture
+                    mode="enroll"
+                    onFaceCapture={handleFaceLoginResult}
+                  />
+                </div>
               </div>
             </div>
           </div>
