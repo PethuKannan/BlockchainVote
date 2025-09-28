@@ -33,6 +33,7 @@ export default function FaceCapture({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const detectionIntervalRef = useRef<number | null>(null);
+  const stableCountRef = useRef<number>(0);
   
   const { toast } = useToast();
 
@@ -139,6 +140,8 @@ export default function FaceCapture({
         setCaptureStatus('detecting');
         setEnrollmentTriggered(false); // Reset enrollment flag when video starts
         setVerificationTriggered(false); // Reset verification flag when video starts
+        setStableDetectionCount(0); // Reset stable count when video starts
+        stableCountRef.current = 0; // Also reset the ref
         
         // Start face detection after a short delay to ensure video is playing
         setTimeout(() => {
@@ -307,9 +310,12 @@ export default function FaceCapture({
           if (confidence >= minConfidenceThreshold) {
             setFaceDetected(true);
             setDetectionQuality(confidence);
-            setStableDetectionCount(prev => prev + 1);
             
-            console.log(`High quality face detected - confidence: ${confidence.toFixed(3)}, stable count: ${stableDetectionCount + 1}`);
+            // Use ref for immediate tracking and state for UI
+            stableCountRef.current += 1;
+            setStableDetectionCount(stableCountRef.current);
+            
+            console.log(`High quality face detected - confidence: ${confidence.toFixed(3)}, stable count: ${stableCountRef.current}`);
             
             // Draw detection boxes with color based on quality
             detections.forEach(detection => {
@@ -335,11 +341,11 @@ export default function FaceCapture({
 
             // Require stable detection for reliable capture (at least 3 consecutive good detections)
             const requiredStability = mode === 'enroll' ? 5 : 3;
-            if (detections.length === 1 && stableDetectionCount >= requiredStability) {
+            if (detections.length === 1 && stableCountRef.current >= requiredStability) {
               const detection = detections[0];
               
               if (mode === "enroll" && onFaceCapture && !enrollmentTriggered) {
-                console.log(`Triggering face enrollment after ${stableDetectionCount} stable detections`);
+                console.log(`Triggering face enrollment after ${stableCountRef.current} stable detections`);
                 setEnrollmentTriggered(true);
                 onFaceCapture(detection.descriptor);
                 setCaptureStatus('captured');
@@ -368,11 +374,13 @@ export default function FaceCapture({
           } else {
             // Reset stable detection count if confidence is too low
             setFaceDetected(false);
+            stableCountRef.current = 0;
             setStableDetectionCount(0);
             console.log(`Low confidence face detected: ${confidence.toFixed(3)} < ${minConfidenceThreshold}`);
           }
         } else {
           setFaceDetected(false);
+          stableCountRef.current = 0;
           setStableDetectionCount(0);
           console.log('No face detected in current frame');
           
