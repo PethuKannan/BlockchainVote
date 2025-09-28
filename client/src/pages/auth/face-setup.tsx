@@ -16,6 +16,22 @@ export default function FaceSetup() {
   const [enrollmentComplete, setEnrollmentComplete] = useState(false);
   const [capturedDescriptor, setCapturedDescriptor] = useState<Float32Array | null>(null);
 
+  const handleStatusChange = (status: 'idle' | 'detecting' | 'captured' | 'error') => {
+    console.log('Face capture status changed to:', status);
+    
+    // Redirect to dashboard when face is captured
+    if (status === 'captured') {
+      toast({
+        title: "Face Captured!",
+        description: "Your face has been captured successfully. Redirecting to dashboard...",
+      });
+      
+      setTimeout(() => {
+        navigate("/dashboard");
+      }, 1500);
+    }
+  };
+
   // Check server for current user state and redirect if needed
   useEffect(() => {
     const checkUserStatus = async () => {
@@ -274,6 +290,7 @@ export default function FaceSetup() {
                 <FaceCapture
                   mode="enroll"
                   onFaceCapture={handleFaceCapture}
+                  onStatusChange={handleStatusChange}
                   className="mx-auto max-w-lg"
                 />
               </div>

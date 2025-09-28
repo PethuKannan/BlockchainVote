@@ -8,6 +8,7 @@ interface FaceCaptureProps {
   mode: "enroll" | "verify";
   onFaceCapture?: (descriptor: Float32Array) => void;
   onVerificationResult?: (isMatch: boolean, confidence: number) => void;
+  onStatusChange?: (status: 'idle' | 'detecting' | 'captured' | 'error') => void;
   existingDescriptor?: number[] | null;
   className?: string;
 }
@@ -16,6 +17,7 @@ export default function FaceCapture({
   mode, 
   onFaceCapture, 
   onVerificationResult, 
+  onStatusChange,
   existingDescriptor,
   className = "" 
 }: FaceCaptureProps) {
@@ -73,6 +75,13 @@ export default function FaceCapture({
 
     loadModels();
   }, [toast]);
+
+  // Watch for status changes and notify parent
+  useEffect(() => {
+    if (onStatusChange) {
+      onStatusChange(captureStatus);
+    }
+  }, [captureStatus, onStatusChange]);
 
   // Start camera
   const startCamera = async () => {
