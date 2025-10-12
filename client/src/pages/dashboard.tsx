@@ -26,7 +26,7 @@ export default function Dashboard() {
   // Ensure elections is an array
   const electionsList = Array.isArray(elections) ? elections : [];
 
-  const voteForCandidate = async (electionId: string, candidateId: string) => {
+  const voteForCandidate = async (electionId: string, candidateId: string, candidateName: string, candidateParty: string) => {
     // Check authentication requirements before voting
     if (!user?.totpEnabled) {
       toast({
@@ -55,12 +55,15 @@ export default function Dashboard() {
       const result = await response.json();
       
       toast({
-        title: "Vote Recorded",
-        description: `Your vote has been recorded in block #${result.blockNumber}`,
+        title: "Thank You for Voting! 🎉",
+        description: `You voted for ${candidateName} (${candidateParty}). Your vote has been securely recorded in blockchain block #${result.blockNumber}.`,
+        duration: 6000,
       });
       
       // Refresh elections to update UI
-      window.location.reload();
+      setTimeout(() => {
+        window.location.reload();
+      }, 2000);
     } catch (error: any) {
       toast({
         title: "Voting Failed",
@@ -200,7 +203,7 @@ export default function Dashboard() {
                             {election.isActive && canVote && (
                               <Button
                                 size="sm"
-                                onClick={() => voteForCandidate(election.id, candidate.id)}
+                                onClick={() => voteForCandidate(election.id, candidate.id, candidate.name, candidate.party)}
                                 data-testid={`button-vote-${candidate.id}`}
                               >
                                 Vote
