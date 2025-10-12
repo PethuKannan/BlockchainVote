@@ -44,23 +44,34 @@ export default function Login() {
       const response = await apiRequest("POST", "/api/auth/login", data);
       const result = await response.json();
       
-      // Check if user has face recognition enabled
-      if (!result.user.faceEnabled) {
+      // Check if TOTP setup is required (first time login)
+      if (result.requiresTotpSetup) {
+        login(result.token, result.user);
         toast({
-          title: "Face Recognition Required",
-          description: "You must set up face recognition before logging in. Redirecting to setup...",
-          variant: "destructive",
+          title: "TOTP Setup Required",
+          description: "Please set up two-factor authentication to secure your account",
+        });
+        navigate("/totp-setup");
+        return;
+      }
+      
+      // Check if face setup is required (TOTP done, but no face)
+      if (result.requiresFaceSetup) {
+        login(result.token, result.user);
+        toast({
+          title: "Face Recognition Setup Required",
+          description: "Please set up face recognition to complete your account security",
         });
         navigate("/face-setup");
         return;
       }
       
-      // Store pending auth data and require face verification
+      // Both TOTP and face are enabled - require face verification
       setPendingAuthData({ token: result.token, user: result.user });
       setShowFaceVerification(true);
       
       toast({
-        title: "Password Verified",
+        title: "Credentials Verified",
         description: "Now please complete face verification to finish login",
       });
       
@@ -80,13 +91,6 @@ export default function Login() {
           description: "Please enter your 6-digit authenticator code",
           variant: "default",
         });
-      } else if (errorData.requiresFaceSetup) {
-        toast({
-          title: "Face Recognition Required",
-          description: "You must set up face recognition before logging in. Redirecting to setup...",
-          variant: "destructive",
-        });
-        navigate("/face-setup");
       } else {
         toast({
           title: "Login Failed",

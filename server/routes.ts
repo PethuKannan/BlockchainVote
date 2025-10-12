@@ -111,6 +111,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(401).json({ message: "Invalid credentials" });
       }
       
+      // Check if TOTP needs to be set up (first time login)
+      if (!user.totpEnabled) {
+        const token = jwt.sign({ userId: user.id }, JWT_SECRET, { expiresIn: '24h' });
+        return res.json({
+          message: "TOTP setup required",
+          token,
+          requiresTotpSetup: true,
+          user: {
+            id: user.id,
+            username: user.username,
+            fullName: user.fullName,
+            totpEnabled: false,
+            faceEnabled: user.faceEnabled,
+          }
+        });
+      }
+      
       // Check TOTP if enabled
       if (user.totpEnabled && user.totpSecret) {
         if (!totpCode) {
@@ -129,16 +146,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
       
-      // Check if face recognition is enabled and required
+      // TOTP validated - check if face needs to be set up
       if (!user.faceEnabled) {
-        return res.status(401).json({ 
-          message: "Face recognition is required for login. Please set up face recognition first.",
-          requiresFaceSetup: true 
+        const token = jwt.sign({ userId: user.id }, JWT_SECRET, { expiresIn: '24h' });
+        return res.json({
+          message: "Face recognition setup required",
+          token,
+          requiresFaceSetup: true,
+          user: {
+            id: user.id,
+            username: user.username,
+            fullName: user.fullName,
+            totpEnabled: user.totpEnabled,
+            faceEnabled: false,
+          }
         });
       }
       
-      // If face is enabled, password/TOTP validation passed, return token and user info
-      // Face verification will be handled separately in the frontend
+      // All authentication methods enabled - return token and user info for face verification
       const token = jwt.sign({ userId: user.id }, JWT_SECRET, { expiresIn: '24h' });
       
       res.json({
