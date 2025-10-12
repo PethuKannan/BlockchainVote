@@ -19,16 +19,9 @@ export default function FaceSetup() {
   const handleStatusChange = (status: 'idle' | 'detecting' | 'captured' | 'error') => {
     console.log('Face capture status changed to:', status);
     
-    // Redirect to dashboard when face is captured
+    // Note: Actual completion is handled in handleFaceCapture after API call
     if (status === 'captured') {
-      toast({
-        title: "Face Captured!",
-        description: "Your face has been captured successfully. Redirecting to dashboard...",
-      });
-      
-      setTimeout(() => {
-        navigate("/dashboard");
-      }, 1500);
+      console.log('Face captured - processing enrollment...');
     }
   };
 
@@ -162,12 +155,21 @@ export default function FaceSetup() {
   };
 
   const completeFaceSetup = () => {
-    // Update user data in auth context to reflect face enabled
-    if (user) {
-      const updatedUser = { ...user, faceEnabled: true };
-      localStorage.setItem("user", JSON.stringify(updatedUser));
-    }
-    navigate("/dashboard");
+    // Show message and redirect to login for full authentication
+    toast({
+      title: "Setup Complete!",
+      description: "Please sign in again to vote with your new security settings.",
+      duration: 5000,
+    });
+    
+    // Clear authentication to force fresh login
+    localStorage.removeItem("token");
+    localStorage.removeItem("user");
+    
+    // Redirect to login after short delay
+    setTimeout(() => {
+      navigate("/login");
+    }, 2000);
   };
 
   const skipFaceSetup = () => {
