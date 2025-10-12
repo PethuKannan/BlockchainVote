@@ -10,6 +10,7 @@ import Login from "@/pages/auth/login";
 import TOTPSetup from "@/pages/auth/totp-setup";
 import FaceSetup from "@/pages/auth/face-setup";
 import Dashboard from "@/pages/dashboard";
+import VoteSuccess from "@/pages/vote-success";
 
 function Router() {
   return (
@@ -20,6 +21,7 @@ function Router() {
       <Route path="/totp-setup" component={TOTPSetup} />
       <Route path="/face-setup" component={FaceSetup} />
       <Route path="/dashboard" component={Dashboard} />
+      <Route path="/vote-success" component={VoteSuccess} />
       <Route component={NotFound} />
     </Switch>
   );

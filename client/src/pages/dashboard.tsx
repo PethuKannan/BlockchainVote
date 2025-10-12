@@ -54,16 +54,16 @@ export default function Dashboard() {
       
       const result = await response.json();
       
-      toast({
-        title: "Thank You for Voting! 🎉",
-        description: `You voted for ${candidateName} (${candidateParty}). Your vote has been securely recorded in blockchain block #${result.blockNumber}.`,
-        duration: 6000,
-      });
+      // Store vote data for success page
+      localStorage.setItem("voteSuccess", JSON.stringify({
+        candidateName,
+        candidateParty,
+        blockNumber: result.blockNumber,
+        blockHash: result.blockHash
+      }));
       
-      // Refresh elections to update UI
-      setTimeout(() => {
-        window.location.reload();
-      }, 2000);
+      // Navigate to success page
+      navigate("/vote-success");
     } catch (error: any) {
       toast({
         title: "Voting Failed",
