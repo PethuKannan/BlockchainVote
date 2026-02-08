@@ -1,0 +1,637 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VoteChain Secure - TOTP Authentication</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/heroicons@2.0.16/24/outline/index.js" type="module"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script>
+    tailwind.config = {
+        theme: {
+            extend: {
+                borderRadius: {
+                    lg: "var(--radius)",
+                    md: "calc(var(--radius) - 2px)",
+                    sm: "calc(var(--radius) - 4px)",
+                },
+                colors: {
+                    background: "var(--background)",
+                    foreground: "var(--foreground)",
+                    card: {
+                        DEFAULT: "var(--card)",
+                        foreground: "var(--card-foreground)",
+                    },
+                    popover: {
+                        DEFAULT: "var(--popover)",
+                        foreground: "var(--popover-foreground)",
+                    },
+                    primary: {
+                        DEFAULT: "var(--primary)",
+                        foreground: "var(--primary-foreground)",
+                    },
+                    secondary: {
+                        DEFAULT: "var(--secondary)",
+                        foreground: "var(--secondary-foreground)",
+                    },
+                    muted: {
+                        DEFAULT: "var(--muted)",
+                        foreground: "var(--muted-foreground)",
+                    },
+                    accent: {
+                        DEFAULT: "var(--accent)",
+                        foreground: "var(--accent-foreground)",
+                    },
+                    destructive: {
+                        DEFAULT: "var(--destructive)",
+                        foreground: "var(--destructive-foreground)",
+                    },
+                    border: "var(--border)",
+                    input: "var(--input)",
+                    ring: "var(--ring)",
+                    chart: {
+                        "1": "var(--chart-1)",
+                        "2": "var(--chart-2)",
+                        "3": "var(--chart-3)",
+                        "4": "var(--chart-4)",
+                        "5": "var(--chart-5)",
+                    }
+                },
+                fontFamily: {
+                    sans: ["Inter", "sans-serif"],
+                }
+            },
+        }
+    };
+    </script>
+    <style>
+        :root {
+            --background: hsl(210 40% 98%);
+            --foreground: hsl(222.2 84% 4.9%);
+            --card: hsl(0 0% 100%);
+            --card-foreground: hsl(222.2 84% 4.9%);
+            --popover: hsl(0 0% 100%);
+            --popover-foreground: hsl(222.2 84% 4.9%);
+            --primary: hsl(221.2 83.2% 53.3%);
+            --primary-foreground: hsl(210 40% 98%);
+            --secondary: hsl(210 40% 96%);
+            --secondary-foreground: hsl(222.2 84% 4.9%);
+            --muted: hsl(210 40% 96%);
+            --muted-foreground: hsl(215.4 16.3% 46.9%);
+            --accent: hsl(210 40% 96%);
+            --accent-foreground: hsl(222.2 84% 4.9%);
+            --destructive: hsl(0 84.2% 60.2%);
+            --destructive-foreground: hsl(210 40% 98%);
+            --border: hsl(214.3 31.8% 91.4%);
+            --input: hsl(214.3 31.8% 91.4%);
+            --ring: hsl(221.2 83.2% 53.3%);
+            --radius: 0.75rem;
+            --chart-1: hsl(12 76% 61%);
+            --chart-2: hsl(173 58% 39%);
+            --chart-3: hsl(197 37% 24%);
+            --chart-4: hsl(43 74% 66%);
+            --chart-5: hsl(27 87% 67%);
+        }
+        
+        .dark {
+            --background: hsl(222.2 84% 4.9%);
+            --foreground: hsl(210 40% 98%);
+            --card: hsl(222.2 84% 4.9%);
+            --card-foreground: hsl(210 40% 98%);
+            --popover: hsl(222.2 84% 4.9%);
+            --popover-foreground: hsl(210 40% 98%);
+            --primary: hsl(217.2 91.2% 59.8%);
+            --primary-foreground: hsl(222.2 84% 4.9%);
+            --secondary: hsl(217.2 32.6% 17.5%);
+            --secondary-foreground: hsl(210 40% 98%);
+            --muted: hsl(217.2 32.6% 17.5%);
+            --muted-foreground: hsl(215 20.2% 65.1%);
+            --accent: hsl(217.2 32.6% 17.5%);
+            --accent-foreground: hsl(210 40% 98%);
+            --destructive: hsl(0 62.8% 30.6%);
+            --destructive-foreground: hsl(210 40% 98%);
+            --border: hsl(217.2 32.6% 17.5%);
+            --input: hsl(217.2 32.6% 17.5%);
+            --ring: hsl(224.3 76.3% 94.1%);
+        }
+
+        .totp-input {
+            width: 3rem;
+            height: 3rem;
+            text-align: center;
+            font-size: 1.5rem;
+            font-weight: 600;
+            border: 2px solid hsl(var(--border));
+            border-radius: 0.5rem;
+            transition: all 0.2s;
+        }
+
+        .totp-input:focus {
+            outline: none;
+            border-color: hsl(var(--primary));
+            box-shadow: 0 0 0 3px hsla(var(--primary) / 0.1);
+        }
+
+        .qr-container {
+            background: linear-gradient(135deg, hsl(var(--primary) / 0.05) 0%, hsl(var(--accent)) 100%);
+            border: 2px dashed hsl(var(--border));
+        }
+
+        .step-indicator {
+            position: relative;
+        }
+
+        .step-indicator::after {
+            content: '';
+            position: absolute;
+            top: 2rem;
+            left: 50%;
+            width: 2px;
+            height: 2rem;
+            background: hsl(var(--border));
+            transform: translateX(-50%);
+        }
+
+        .step-indicator:last-child::after {
+            display: none;
+        }
+
+        .step-complete .step-indicator::after {
+            background: hsl(var(--primary));
+        }
+
+        .loading-spinner {
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+
+        .fade-in {
+            animation: fadeIn 0.3s ease-in-out;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+    </style>
+</head>
+<body class="bg-background font-sans">
+    <!-- Navigation Header -->
+    <nav class="bg-card border-b border-border">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between items-center h-16">
+                <div class="flex items-center space-x-2">
+                    <div class="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
+                        <svg class="w-5 h-5 text-primary-foreground" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                        </svg>
+                    </div>
+                    <span class="text-xl font-bold text-foreground">VoteChain Secure</span>
+                </div>
+                <div class="flex items-center space-x-4">
+                    <button class="text-muted-foreground hover:text-foreground transition-colors">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                        </svg>
+                    </button>
+                    <button class="bg-secondary text-secondary-foreground px-4 py-2 rounded-md hover:bg-secondary/80 transition-colors">
+                        Back to Login
+                    </button>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <div class="min-h-screen bg-background py-8">
+        <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+            <!-- Progress Steps -->
+            <div class="mb-8">
+                <div class="flex justify-center items-center space-x-8 mb-6">
+                    <div class="flex flex-col items-center step-complete">
+                        <div class="step-indicator">
+                            <div class="w-8 h-8 bg-primary text-primary-foreground rounded-full flex items-center justify-center font-semibold text-sm">
+                                ✓
+                            </div>
+                        </div>
+                        <span class="text-sm font-medium text-primary mt-2">Account Created</span>
+                    </div>
+                    <div class="flex flex-col items-center">
+                        <div class="step-indicator">
+                            <div class="w-8 h-8 bg-primary text-primary-foreground rounded-full flex items-center justify-center font-semibold text-sm">
+                                2
+                            </div>
+                        </div>
+                        <span class="text-sm font-medium text-primary mt-2">Setup 2FA</span>
+                    </div>
+                    <div class="flex flex-col items-center">
+                        <div class="step-indicator">
+                            <div class="w-8 h-8 bg-muted text-muted-foreground rounded-full flex items-center justify-center font-semibold text-sm">
+                                3
+                            </div>
+                        </div>
+                        <span class="text-sm font-medium text-muted-foreground mt-2">Verification</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- TOTP Setup Section -->
+            <!-- @COMPONENT: TOTPSetup [handles QR code generation and verification] -->
+            <div class="bg-card rounded-lg shadow-lg border border-border overflow-hidden fade-in">
+                <div class="bg-gradient-to-r from-primary to-primary/80 px-6 py-4">
+                    <h1 class="text-2xl font-bold text-primary-foreground">Setup Two-Factor Authentication</h1>
+                    <p class="text-primary-foreground/80 mt-1">Secure your voting account with TOTP authentication</p>
+                </div>
+
+                <div class="p-6">
+                    <!-- Step 1: QR Code Setup -->
+                    <div class="mb-8">
+                        <div class="flex items-center mb-4">
+                            <div class="w-6 h-6 bg-primary text-primary-foreground rounded-full flex items-center justify-center text-sm font-semibold mr-3">1</div>
+                            <h2 class="text-lg font-semibold text-foreground">Scan QR Code</h2>
+                        </div>
+                        
+                        <div class="grid md:grid-cols-2 gap-6">
+                            <!-- QR Code Display -->
+                            <div class="flex flex-col items-center">
+                                <div class="qr-container rounded-lg p-6 mb-4">
+                                    <div class="w-48 h-48 bg-white rounded-lg flex items-center justify-center">
+                                        <!-- @FUNCTIONALITY: QR code should be generated using speakeasy and qrcode libraries -->
+                                        <!-- Mock QR code pattern for design purposes -->
+                                        <div class="w-40 h-40 grid grid-cols-8 gap-1" data-mock="true" data-implementation="Replace with actual QR code generated from TOTP secret">
+                                            <div class="bg-black"></div><div class="bg-white"></div><div class="bg-black"></div><div class="bg-white"></div><div class="bg-black"></div><div class="bg-white"></div><div class="bg-black"></div><div class="bg-white"></div>
+                                            <div class="bg-white"></div><div class="bg-black"></div><div class="bg-white"></div><div class="bg-black"></div><div class="bg-white"></div><div class="bg-black"></div><div class="bg-white"></div><div class="bg-black"></div>
+                                            <div class="bg-black"></div><div class="bg-white"></div><div class="bg-black"></div><div class="bg-white"></div><div class="bg-black"></div><div class="bg-white"></div><div class="bg-black"></div><div class="bg-white"></div>
+                                            <div class="bg-white"></div><div class="bg-black"></div><div class="bg-white"></div><div class="bg-black"></div><div class="bg-white"></div><div class="bg-black"></div><div class="bg-white"></div><div class="bg-black"></div>
+                                            <div class="bg-black"></div><div class="bg-white"></div><div class="bg-black"></div><div class="bg-white"></div><div class="bg-black"></div><div class="bg-white"></div><div class="bg-black"></div><div class="bg-white"></div>
+                                            <div class="bg-white"></div><div class="bg-black"></div><div class="bg-white"></div><div class="bg-black"></div><div class="bg-white"></div><div class="bg-black"></div><div class="bg-white"></div><div class="bg-black"></div>
+                                            <div class="bg-black"></div><div class="bg-white"></div><div class="bg-black"></div><div class="bg-white"></div><div class="bg-black"></div><div class="bg-white"></div><div class="bg-black"></div><div class="bg-white"></div>
+                                            <div class="bg-white"></div><div class="bg-black"></div><div class="bg-white"></div><div class="bg-black"></div><div class="bg-white"></div><div class="bg-black"></div><div class="bg-white"></div><div class="bg-black"></div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <p class="text-sm text-muted-foreground text-center">Scan this QR code with your authenticator app</p>
+                            </div>
+
+                            <!-- Instructions -->
+                            <div class="space-y-4">
+                                <div class="bg-muted rounded-lg p-4">
+                                    <h3 class="font-semibold text-foreground mb-2">📱 Recommended Apps</h3>
+                                    <ul class="space-y-2 text-sm text-muted-foreground">
+                                        <li class="flex items-center">
+                                            <svg class="w-4 h-4 mr-2 text-primary" fill="currentColor" viewBox="0 0 24 24">
+                                                <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                                            </svg>
+                                            Google Authenticator
+                                        </li>
+                                        <li class="flex items-center">
+                                            <svg class="w-4 h-4 mr-2 text-primary" fill="currentColor" viewBox="0 0 24 24">
+                                                <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                                            </svg>
+                                            Authy
+                                        </li>
+                                        <li class="flex items-center">
+                                            <svg class="w-4 h-4 mr-2 text-primary" fill="currentColor" viewBox="0 0 24 24">
+                                                <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                                            </svg>
+                                            Microsoft Authenticator
+                                        </li>
+                                    </ul>
+                                </div>
+
+                                <div class="bg-accent rounded-lg p-4">
+                                    <h3 class="font-semibold text-accent-foreground mb-2">🔐 Manual Setup</h3>
+                                    <p class="text-sm text-muted-foreground mb-2">If you can't scan the QR code, manually enter this secret:</p>
+                                    <div class="bg-card border border-border rounded p-2 font-mono text-sm break-all" data-bind="totpSecret">
+                                        <!-- @FUNCTIONALITY: Display the base32 TOTP secret here -->
+                                        <span data-mock="true">JBSWY3DPEHPK3PXP</span>
+                                    </div>
+                                    <button class="mt-2 text-xs text-primary hover:text-primary/80 transition-colors" data-event="click:copySecret">
+                                        📋 Copy Secret
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Step 2: Verification -->
+                    <div>
+                        <div class="flex items-center mb-4">
+                            <div class="w-6 h-6 bg-primary text-primary-foreground rounded-full flex items-center justify-center text-sm font-semibold mr-3">2</div>
+                            <h2 class="text-lg font-semibold text-foreground">Verify Setup</h2>
+                        </div>
+
+                        <div class="bg-muted rounded-lg p-6">
+                            <p class="text-foreground mb-4">Enter the 6-digit code from your authenticator app to verify the setup:</p>
+                            
+                            <!-- TOTP Code Input -->
+                            <div class="flex justify-center space-x-2 mb-6">
+                                <input type="text" maxlength="1" class="totp-input" data-index="0" data-event="input:handleTOTPInput">
+                                <input type="text" maxlength="1" class="totp-input" data-index="1" data-event="input:handleTOTPInput">
+                                <input type="text" maxlength="1" class="totp-input" data-index="2" data-event="input:handleTOTPInput">
+                                <input type="text" maxlength="1" class="totp-input" data-index="3" data-event="input:handleTOTPInput">
+                                <input type="text" maxlength="1" class="totp-input" data-index="4" data-event="input:handleTOTPInput">
+                                <input type="text" maxlength="1" class="totp-input" data-index="5" data-event="input:handleTOTPInput">
+                            </div>
+
+                            <!-- Error/Success Messages -->
+                            <div id="verification-message" class="mb-4 hidden">
+                                <!-- Error State -->
+                                <div class="error-message bg-destructive/10 border border-destructive/20 rounded-lg p-3 hidden">
+                                    <div class="flex items-center text-destructive">
+                                        <svg class="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 24 24">
+                                            <path d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.732-.833-2.5 0L4.732 16.5c-.77.833.192 2.5 1.732 2.5z"/>
+                                        </svg>
+                                        <span class="font-medium">Invalid code. Please try again.</span>
+                                    </div>
+                                </div>
+
+                                <!-- Success State -->
+                                <div class="success-message bg-green-50 border border-green-200 rounded-lg p-3 hidden">
+                                    <div class="flex items-center text-green-800">
+                                        <svg class="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 24 24">
+                                            <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                                        </svg>
+                                        <span class="font-medium">TOTP successfully verified!</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Action Buttons -->
+                            <div class="flex flex-col sm:flex-row gap-3">
+                                <button 
+                                    id="verify-button" 
+                                    class="flex-1 bg-primary hover:bg-primary/90 text-primary-foreground font-medium py-3 px-6 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                    data-event="click:verifyTOTP"
+                                    data-implementation="Should verify TOTP code with backend API"
+                                >
+                                    <span class="verify-text">Verify Code</span>
+                                    <span class="loading-text hidden flex items-center justify-center">
+                                        <svg class="loading-spinner w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24">
+                                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                        </svg>
+                                        Verifying...
+                                    </span>
+                                </button>
+                                
+                                <button 
+                                    class="bg-secondary hover:bg-secondary/80 text-secondary-foreground font-medium py-3 px-6 rounded-md transition-colors"
+                                    data-event="click:regenerateSecret"
+                                    data-implementation="Should generate new TOTP secret and QR code"
+                                >
+                                    🔄 Generate New Code
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <!-- @END_COMPONENT: TOTPSetup -->
+
+            <!-- Alternative Login Method Section -->
+            <div class="mt-8 bg-card rounded-lg border border-border p-6">
+                <h3 class="text-lg font-semibold text-foreground mb-3">Need Help?</h3>
+                <div class="grid md:grid-cols-2 gap-4">
+                    <div class="bg-muted rounded-lg p-4">
+                        <h4 class="font-medium text-foreground mb-2">🔧 Troubleshooting</h4>
+                        <ul class="text-sm text-muted-foreground space-y-1">
+                            <li>• Ensure your device time is synchronized</li>
+                            <li>• Check your internet connection</li>
+                            <li>• Try regenerating the QR code</li>
+                        </ul>
+                    </div>
+                    <div class="bg-muted rounded-lg p-4">
+                        <h4 class="font-medium text-foreground mb-2">📞 Support</h4>
+                        <p class="text-sm text-muted-foreground">Contact our support team if you continue experiencing issues with TOTP setup.</p>
+                        <button class="mt-2 text-sm text-primary hover:text-primary/80 transition-colors">
+                            Get Help →
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Login Demo Section -->
+            <div class="mt-8 bg-card rounded-lg border border-border overflow-hidden">
+                <div class="bg-gradient-to-r from-secondary to-accent px-6 py-4">
+                    <h3 class="text-lg font-semibold text-foreground">Login with TOTP Demo</h3>
+                    <p class="text-muted-foreground text-sm">Preview of the login flow after TOTP setup</p>
+                </div>
+                
+                <div class="p-6">
+                    <div class="max-w-md mx-auto">
+                        <form class="space-y-4" data-implementation="This should integrate with the main login flow">
+                            <div>
+                                <label class="block text-sm font-medium text-foreground mb-2">Username</label>
+                                <input 
+                                    type="text" 
+                                    class="w-full px-3 py-2 border border-border rounded-md bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent"
+                                    placeholder="Enter your username"
+                                    data-bind="username"
+                                >
+                            </div>
+                            
+                            <div>
+                                <label class="block text-sm font-medium text-foreground mb-2">Password</label>
+                                <input 
+                                    type="password" 
+                                    class="w-full px-3 py-2 border border-border rounded-md bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent"
+                                    placeholder="Enter your password"
+                                    data-bind="password"
+                                >
+                            </div>
+                            
+                            <div>
+                                <label class="block text-sm font-medium text-foreground mb-2">
+                                    Authenticator Code
+                                    <span class="text-xs text-muted-foreground">(6 digits)</span>
+                                </label>
+                                <input 
+                                    type="text" 
+                                    maxlength="6"
+                                    class="w-full px-3 py-2 border border-border rounded-md bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent text-center font-mono text-lg tracking-widest"
+                                    placeholder="000000"
+                                    data-bind="totpCode"
+                                    data-event="input:validateTOTPFormat"
+                                >
+                            </div>
+                            
+                            <button 
+                                type="submit" 
+                                class="w-full bg-primary hover:bg-primary/90 text-primary-foreground font-medium py-3 px-4 rounded-md transition-colors"
+                                data-event="click:handleLogin"
+                                data-implementation="Should authenticate with backend using username, password, and TOTP code"
+                            >
+                                Sign In to VoteChain
+                            </button>
+                        </form>
+                        
+                        <div class="mt-4 text-center">
+                            <button class="text-sm text-primary hover:text-primary/80 transition-colors">
+                                Lost access to authenticator? →
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="bg-card border-t border-border py-8">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="text-center">
+                <p class="text-muted-foreground text-sm">
+                    🔒 Your vote is secured with blockchain technology and two-factor authentication
+                </p>
+                <div class="mt-2 flex justify-center items-center space-x-4 text-xs text-muted-foreground">
+                    <span>• End-to-end encrypted</span>
+                    <span>• Immutable blockchain records</span>
+                    <span>• TOTP-secured authentication</span>
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        // Demo JavaScript for TOTP input handling
+        (function() {
+            // TOTP Input Management
+            const totpInputs = document.querySelectorAll('.totp-input');
+            let currentCode = '';
+
+            totpInputs.forEach((input, index) => {
+                input.addEventListener('input', function(e) {
+                    const value = e.target.value;
+                    if (value && /^\d$/.test(value)) {
+                        currentCode = Array.from(totpInputs).map(inp => inp.value).join('');
+                        
+                        // Move to next input
+                        if (index < totpInputs.length - 1) {
+                            totpInputs[index + 1].focus();
+                        }
+                        
+                        // Auto-verify when all 6 digits are entered
+                        if (currentCode.length === 6) {
+                            validateTOTPCode(currentCode);
+                        }
+                    }
+                });
+
+                input.addEventListener('keydown', function(e) {
+                    // Handle backspace to move to previous input
+                    if (e.key === 'Backspace' && !e.target.value && index > 0) {
+                        totpInputs[index - 1].focus();
+                    }
+                });
+
+                input.addEventListener('paste', function(e) {
+                    e.preventDefault();
+                    const pastedData = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, 6);
+                    
+                    pastedData.split('').forEach((digit, i) => {
+                        if (totpInputs[i]) {
+                            totpInputs[i].value = digit;
+                        }
+                    });
+                    
+                    if (pastedData.length === 6) {
+                        validateTOTPCode(pastedData);
+                    }
+                });
+            });
+
+            // Mock TOTP validation
+            function validateTOTPCode(code) {
+                const messageContainer = document.getElementById('verification-message');
+                const errorMessage = messageContainer.querySelector('.error-message');
+                const successMessage = messageContainer.querySelector('.success-message');
+                
+                // TODO: Replace with actual API call to /api/auth/verify-totp
+                // This is just a demo - in production, verify against backend
+                setTimeout(() => {
+                    if (code === '123456') { // Mock success code
+                        showSuccess();
+                    } else {
+                        showError();
+                    }
+                }, 1000);
+            }
+
+            function showError() {
+                const messageContainer = document.getElementById('verification-message');
+                const errorMessage = messageContainer.querySelector('.error-message');
+                const successMessage = messageContainer.querySelector('.success-message');
+                
+                messageContainer.classList.remove('hidden');
+                errorMessage.classList.remove('hidden');
+                successMessage.classList.add('hidden');
+                
+                // Clear inputs for retry
+                totpInputs.forEach(input => {
+                    input.value = '';
+                    input.classList.add('border-destructive');
+                });
+                totpInputs[0].focus();
+                
+                // Remove error styling after delay
+                setTimeout(() => {
+                    totpInputs.forEach(input => {
+                        input.classList.remove('border-destructive');
+                    });
+                }, 2000);
+            }
+
+            function showSuccess() {
+                const messageContainer = document.getElementById('verification-message');
+                const errorMessage = messageContainer.querySelector('.error-message');
+                const successMessage = messageContainer.querySelector('.success-message');
+                
+                messageContainer.classList.remove('hidden');
+                successMessage.classList.remove('hidden');
+                errorMessage.classList.add('hidden');
+                
+                totpInputs.forEach(input => {
+                    input.classList.add('border-green-500');
+                    input.disabled = true;
+                });
+                
+                // Simulate redirect to voting dashboard
+                setTimeout(() => {
+                    alert('TOTP setup complete! Redirecting to voting dashboard...');
+                    // TODO: Implement actual redirect logic
+                }, 2000);
+            }
+
+            // Manual verify button handler
+            document.getElementById('verify-button').addEventListener('click', function() {
+                const code = Array.from(totpInputs).map(inp => inp.value).join('');
+                if (code.length === 6) {
+                    validateTOTPCode(code);
+                } else {
+                    alert('Please enter all 6 digits');
+                }
+            });
+
+            // Copy secret button handler
+            document.querySelector('[data-event="click:copySecret"]').addEventListener('click', function() {
+                // TODO: Implement actual secret copying
+                const secret = 'JBSWY3DPEHPK3PXP'; // Mock secret
+                navigator.clipboard.writeText(secret).then(() => {
+                    this.textContent = '✓ Copied!';
+                    setTimeout(() => {
+                        this.textContent = '📋 Copy Secret';
+                    }, 2000);
+                });
+            });
+
+            // Auto-focus first TOTP input on page load
+            totpInputs[0].focus();
+        })();
+    </script>
+</body>
+</html>

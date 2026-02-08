@@ -1,0 +1,569 @@
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VoteChain - Secure TOTP Setup</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+    tailwind.config = {
+        theme: {
+            extend: {
+                borderRadius: {
+                    lg: "var(--radius)",
+                    md: "calc(var(--radius) - 2px)",
+                    sm: "calc(var(--radius) - 4px)",
+                },
+                colors: {
+                    background: "var(--background)",
+                    foreground: "var(--foreground)",
+                    card: {
+                        DEFAULT: "var(--card)",
+                        foreground: "var(--card-foreground)",
+                    },
+                    popover: {
+                        DEFAULT: "var(--popover)",
+                        foreground: "var(--popover-foreground)",
+                    },
+                    primary: {
+                        DEFAULT: "var(--primary)",
+                        foreground: "var(--primary-foreground)",
+                    },
+                    secondary: {
+                        DEFAULT: "var(--secondary)",
+                        foreground: "var(--secondary-foreground)",
+                    },
+                    muted: {
+                        DEFAULT: "var(--muted)",
+                        foreground: "var(--muted-foreground)",
+                    },
+                    accent: {
+                        DEFAULT: "var(--accent)",
+                        foreground: "var(--accent-foreground)",
+                    },
+                    destructive: {
+                        DEFAULT: "var(--destructive)",
+                        foreground: "var(--destructive-foreground)",
+                    },
+                    border: "var(--border)",
+                    input: "var(--input)",
+                    ring: "var(--ring)",
+                    chart: {
+                        "1": "var(--chart-1)",
+                        "2": "var(--chart-2)",
+                        "3": "var(--chart-3)",
+                        "4": "var(--chart-4)",
+                        "5": "var(--chart-5)",
+                    }
+                },
+                fontFamily: {
+                    sans: ["var(--font-sans)"],
+                    serif: ["var(--font-serif)"],
+                    mono: ["var(--font-mono)"],
+                }
+            },
+        }
+    };
+    </script>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <style>
+        :root {
+            --background: hsl(210 40% 98%);
+            --foreground: hsl(222.2 84% 4.9%);
+            --card: hsl(0 0% 100%);
+            --card-foreground: hsl(222.2 84% 4.9%);
+            --popover: hsl(0 0% 100%);
+            --popover-foreground: hsl(222.2 84% 4.9%);
+            --primary: hsl(210 100% 45%);
+            --primary-foreground: hsl(210 40% 98%);
+            --secondary: hsl(210 40% 96%);
+            --secondary-foreground: hsl(222.2 84% 4.9%);
+            --muted: hsl(210 40% 96%);
+            --muted-foreground: hsl(215.4 16.3% 46.9%);
+            --accent: hsl(142 71% 45%);
+            --accent-foreground: hsl(210 40% 98%);
+            --destructive: hsl(0 84% 60%);
+            --destructive-foreground: hsl(210 40% 98%);
+            --border: hsl(214.3 31.8% 91.4%);
+            --input: hsl(214.3 31.8% 91.4%);
+            --ring: hsl(210 100% 45%);
+            --radius: 8px;
+            --font-sans: 'Roboto', sans-serif;
+            --chart-1: hsl(12 76% 61%);
+            --chart-2: hsl(173 58% 39%);
+            --chart-3: hsl(197 37% 24%);
+            --chart-4: hsl(43 74% 66%);
+            --chart-5: hsl(27 87% 67%);
+        }
+        body {
+            font-family: var(--font-sans);
+        }
+        .animate-pulse-slow {
+            animation: pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+        .qr-container {
+            background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+        }
+    </style>
+</head>
+<body class="bg-background text-foreground min-h-screen">
+    <!-- Header -->
+    <header class="bg-card border-b border-border">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between items-center h-16">
+                <div class="flex items-center space-x-3">
+                    <div class="bg-primary text-primary-foreground p-2 rounded-lg">
+                        <i class="fas fa-vote-yea text-xl"></i>
+                    </div>
+                    <div>
+                        <h1 class="text-xl font-bold">VoteChain</h1>
+                        <p class="text-sm text-muted-foreground">Secure Blockchain Voting</p>
+                    </div>
+                </div>
+                <div class="flex items-center space-x-4">
+                    <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-accent/10 text-accent">
+                        <i class="fas fa-shield-alt mr-1"></i>
+                        Secured by TOTP
+                    </span>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <!-- @COMPONENT: TOTPSetupWizard -->
+        <div class="bg-card rounded-xl shadow-lg border border-border overflow-hidden">
+            <!-- Progress Bar -->
+            <div class="bg-secondary p-4">
+                <div class="flex items-center justify-between mb-2">
+                    <h2 class="text-lg font-semibold">Two-Factor Authentication Setup</h2>
+                    <span class="text-sm text-muted-foreground">Step 2 of 3</span>
+                </div>
+                <div class="w-full bg-muted rounded-full h-2">
+                    <div class="bg-primary h-2 rounded-full transition-all duration-300" style="width: 66.67%"></div>
+                </div>
+            </div>
+
+            <div class="p-6">
+                <!-- Security Notice -->
+                <div class="mb-6 p-4 bg-accent/5 border border-accent/20 rounded-lg">
+                    <div class="flex items-start space-x-3">
+                        <i class="fas fa-info-circle text-accent mt-0.5"></i>
+                        <div>
+                            <h3 class="font-medium text-accent mb-1">Enhanced Security Required</h3>
+                            <p class="text-sm text-muted-foreground">To participate in secure voting, you must enable two-factor authentication using an authenticator app.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="grid md:grid-cols-2 gap-8">
+                    <!-- Left Column: Instructions -->
+                    <div class="space-y-6">
+                        <div>
+                            <h3 class="text-lg font-semibold mb-4 flex items-center">
+                                <i class="fas fa-mobile-alt mr-2 text-primary"></i>
+                                Setup Instructions
+                            </h3>
+                            
+                            <!-- Step 1 -->
+                            <div class="flex items-start space-x-4 mb-4 p-3 bg-muted/50 rounded-lg">
+                                <div class="flex-shrink-0 w-8 h-8 bg-primary text-primary-foreground rounded-full flex items-center justify-center text-sm font-bold">1</div>
+                                <div>
+                                    <h4 class="font-medium mb-1">Download an Authenticator App</h4>
+                                    <p class="text-sm text-muted-foreground mb-2">Install one of these recommended apps:</p>
+                                    <div class="flex flex-wrap gap-2">
+                                        <span class="inline-flex items-center px-2 py-1 rounded text-xs bg-card border border-border">
+                                            <i class="fab fa-google mr-1"></i>
+                                            Google Authenticator
+                                        </span>
+                                        <span class="inline-flex items-center px-2 py-1 rounded text-xs bg-card border border-border">
+                                            <i class="fas fa-key mr-1"></i>
+                                            Authy
+                                        </span>
+                                        <span class="inline-flex items-center px-2 py-1 rounded text-xs bg-card border border-border">
+                                            <i class="fas fa-shield-alt mr-1"></i>
+                                            Microsoft Authenticator
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Step 2 -->
+                            <div class="flex items-start space-x-4 mb-4 p-3 bg-accent/5 rounded-lg border border-accent/20">
+                                <div class="flex-shrink-0 w-8 h-8 bg-accent text-accent-foreground rounded-full flex items-center justify-center text-sm font-bold">2</div>
+                                <div>
+                                    <h4 class="font-medium mb-1">Scan the QR Code</h4>
+                                    <p class="text-sm text-muted-foreground">Use your authenticator app to scan the QR code on the right.</p>
+                                </div>
+                            </div>
+
+                            <!-- Step 3 -->
+                            <div class="flex items-start space-x-4 mb-4 p-3 bg-muted/50 rounded-lg">
+                                <div class="flex-shrink-0 w-8 h-8 bg-primary text-primary-foreground rounded-full flex items-center justify-center text-sm font-bold">3</div>
+                                <div>
+                                    <h4 class="font-medium mb-1">Enter Verification Code</h4>
+                                    <p class="text-sm text-muted-foreground">Enter the 6-digit code from your app below to complete setup.</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Manual Entry Option -->
+                        <div class="border border-border rounded-lg p-4">
+                            <h4 class="font-medium mb-2 flex items-center">
+                                <i class="fas fa-keyboard mr-2 text-muted-foreground"></i>
+                                Manual Entry (Alternative)
+                            </h4>
+                            <p class="text-sm text-muted-foreground mb-3">If you can't scan the QR code, manually enter this secret:</p>
+                            <!-- @FUNCTIONALITY: Display actual TOTP secret generated by speakeasy -->
+                            <div class="bg-muted p-3 rounded border font-mono text-sm break-all" data-mock="true">
+                                JBSWY3DPEHPK3PXP
+                            </div>
+                            <button class="mt-2 text-xs text-primary hover:text-primary/80 flex items-center" data-implementation="Copy secret to clipboard">
+                                <i class="fas fa-copy mr-1"></i>
+                                Copy Secret
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Right Column: QR Code -->
+                    <div class="space-y-6">
+                        <div class="text-center">
+                            <h3 class="text-lg font-semibold mb-4 flex items-center justify-center">
+                                <i class="fas fa-qrcode mr-2 text-primary"></i>
+                                QR Code
+                            </h3>
+                            
+                            <!-- QR Code Container -->
+                            <div class="qr-container p-6 rounded-xl border border-border">
+                                <!-- @FUNCTIONALITY: Generate QR code using qrcode library with proper otpauth URI -->
+                                <!-- URI format: otpauth://totp/VoteChain:username?secret=SECRET&issuer=VoteChain -->
+                                <div class="bg-white p-4 rounded-lg shadow-inner mx-auto w-fit" data-mock="true">
+                                    <!-- QR Code placeholder - implement with qrcode library -->
+                                    <!-- Example implementation:
+                                    const qr = require('qrcode');
+                                    const secret = speakeasy.generateSecret({
+                                        name: username,
+                                        issuer: 'VoteChain'
+                                    });
+                                    const qrCodeUrl = await qr.toDataURL(secret.otpauth_url);
+                                    -->
+                                    <div class="w-48 h-48 bg-white border-2 border-gray-200 flex items-center justify-center mx-auto" data-implementation="Replace with actual QR code image">
+                                        <div class="text-center">
+                                            <i class="fas fa-qrcode text-6xl text-gray-400 mb-2"></i>
+                                            <p class="text-xs text-gray-500">QR Code will appear here</p>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <!-- QR Code Status -->
+                                <div class="mt-4 p-3 bg-accent/10 rounded-lg">
+                                    <div class="flex items-center justify-center space-x-2 text-accent">
+                                        <i class="fas fa-check-circle"></i>
+                                        <span class="text-sm font-medium">QR Code Generated Successfully</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Account Details -->
+                            <div class="mt-4 text-sm text-muted-foreground">
+                                <p><strong>Account:</strong> <span data-bind="user.username">john.doe@example.com</span></p>
+                                <p><strong>Issuer:</strong> VoteChain</p>
+                            </div>
+                        </div>
+
+                        <!-- Troubleshooting -->
+                        <div class="bg-muted/30 border border-muted rounded-lg p-4">
+                            <h4 class="font-medium mb-2 flex items-center">
+                                <i class="fas fa-question-circle mr-2 text-muted-foreground"></i>
+                                Having trouble?
+                            </h4>
+                            <ul class="text-sm text-muted-foreground space-y-1">
+                                <li>• Ensure your phone camera can focus on the QR code</li>
+                                <li>• Try adjusting screen brightness</li>
+                                <li>• Use the manual entry option if scanning fails</li>
+                                <li>• Make sure you have a compatible authenticator app</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Verification Form -->
+                <div class="mt-8 border-t border-border pt-6">
+                    <h3 class="text-lg font-semibold mb-4 flex items-center">
+                        <i class="fas fa-shield-check mr-2 text-accent"></i>
+                        Verify Setup
+                    </h3>
+                    
+                    <form class="space-y-4" data-implementation="Handle TOTP verification">
+                        <div>
+                            <label for="totpCode" class="block text-sm font-medium mb-2">
+                                Enter 6-digit code from your authenticator app
+                            </label>
+                            <div class="relative">
+                                <input 
+                                    type="text" 
+                                    id="totpCode"
+                                    maxlength="6"
+                                    placeholder="000000"
+                                    class="w-full px-4 py-3 text-center text-2xl font-mono tracking-widest border border-input rounded-lg focus:ring-2 focus:ring-ring focus:border-transparent bg-background"
+                                    data-implementation="Auto-format and validate TOTP input"
+                                />
+                                <div class="absolute inset-y-0 right-0 pr-3 flex items-center">
+                                    <i class="fas fa-clock text-muted-foreground"></i>
+                                </div>
+                            </div>
+                            <p class="mt-1 text-xs text-muted-foreground">Codes refresh every 30 seconds</p>
+                        </div>
+
+                        <!-- Error State -->
+                        <div class="hidden p-3 bg-destructive/10 border border-destructive/20 rounded-lg" data-state="error">
+                            <div class="flex items-center space-x-2 text-destructive">
+                                <i class="fas fa-exclamation-triangle"></i>
+                                <span class="text-sm font-medium">Invalid verification code. Please try again.</span>
+                            </div>
+                        </div>
+
+                        <!-- Success State -->
+                        <div class="hidden p-3 bg-accent/10 border border-accent/20 rounded-lg" data-state="success">
+                            <div class="flex items-center space-x-2 text-accent">
+                                <i class="fas fa-check-circle"></i>
+                                <span class="text-sm font-medium">TOTP setup completed successfully!</span>
+                            </div>
+                        </div>
+
+                        <div class="flex space-x-4">
+                            <button 
+                                type="button" 
+                                class="flex-1 px-6 py-3 border border-border rounded-lg text-muted-foreground hover:bg-muted transition-colors"
+                                data-event="click:goBack"
+                            >
+                                <i class="fas fa-arrow-left mr-2"></i>
+                                Back
+                            </button>
+                            <button 
+                                type="submit" 
+                                class="flex-1 px-6 py-3 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors font-medium"
+                                data-event="click:verifyTOTP"
+                                data-implementation="Verify TOTP code using speakeasy.verify()"
+                            >
+                                <i class="fas fa-check mr-2"></i>
+                                Verify & Continue
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+        <!-- @END_COMPONENT: TOTPSetupWizard -->
+
+        <!-- Technical Implementation Guide -->
+        <div class="mt-8 bg-card rounded-xl shadow-lg border border-border p-6">
+            <h3 class="text-lg font-semibold mb-4 flex items-center">
+                <i class="fas fa-code mr-2 text-primary"></i>
+                Technical Implementation Guide
+            </h3>
+            
+            <div class="grid md:grid-cols-2 gap-6">
+                <!-- Backend Implementation -->
+                <div class="space-y-4">
+                    <h4 class="font-medium text-accent">Backend (Express.js) Implementation</h4>
+                    
+                    <div class="bg-muted/50 rounded-lg p-4">
+                        <h5 class="font-medium mb-2">1. Generate TOTP Secret</h5>
+                        <pre class="text-xs bg-background p-3 rounded border overflow-x-auto"><code data-mock="true">const speakeasy = require('speakeasy');
+
+// Generate secret
+const secret = speakeasy.generateSecret({
+  name: username,
+  issuer: 'VoteChain',
+  length: 32
+});
+
+// Save to database
+await User.findByIdAndUpdate(userId, {
+  totp_secret: secret.base32
+});</code></pre>
+                    </div>
+
+                    <div class="bg-muted/50 rounded-lg p-4">
+                        <h5 class="font-medium mb-2">2. Generate QR Code</h5>
+                        <pre class="text-xs bg-background p-3 rounded border overflow-x-auto"><code data-mock="true">const qrcode = require('qrcode');
+
+// Create otpauth URI
+const otpauthUrl = speakeasy.otpauthURL({
+  secret: secret.base32,
+  label: username,
+  issuer: 'VoteChain',
+  encoding: 'base32'
+});
+
+// Generate QR code as data URL
+const qrCodeDataUrl = await qrcode.toDataURL(otpauthUrl);
+
+res.json({
+  secret: secret.base32,
+  qrCode: qrCodeDataUrl,
+  otpauthUrl: otpauthUrl
+});</code></pre>
+                    </div>
+
+                    <div class="bg-muted/50 rounded-lg p-4">
+                        <h5 class="font-medium mb-2">3. Verify TOTP Code</h5>
+                        <pre class="text-xs bg-background p-3 rounded border overflow-x-auto"><code data-mock="true">// Verify the token
+const verified = speakeasy.totp.verify({
+  secret: user.totp_secret,
+  encoding: 'base32',
+  token: totpCode,
+  window: 2 // Allow 2 steps tolerance
+});
+
+if (verified) {
+  // Enable TOTP for user
+  await User.findByIdAndUpdate(userId, {
+    totp_enabled: true
+  });
+}</code></pre>
+                    </div>
+                </div>
+
+                <!-- Frontend Implementation -->
+                <div class="space-y-4">
+                    <h4 class="font-medium text-accent">Frontend (React) Implementation</h4>
+                    
+                    <div class="bg-muted/50 rounded-lg p-4">
+                        <h5 class="font-medium mb-2">1. Setup TOTP Hook</h5>
+                        <pre class="text-xs bg-background p-3 rounded border overflow-x-auto"><code data-mock="true">const useTOTPSetup = () => {
+  const [qrCode, setQrCode] = useState('');
+  const [secret, setSecret] = useState('');
+  
+  const generateQR = async () => {
+    const response = await fetch('/api/auth/setup-totp');
+    const data = await response.json();
+    setQrCode(data.qrCode);
+    setSecret(data.secret);
+  };
+  
+  return { qrCode, secret, generateQR };
+};</code></pre>
+                    </div>
+
+                    <div class="bg-muted/50 rounded-lg p-4">
+                        <h5 class="font-medium mb-2">2. Display QR Code</h5>
+                        <pre class="text-xs bg-background p-3 rounded border overflow-x-auto"><code data-mock="true">const TOTPSetup = () => {
+  const { qrCode, generateQR } = useTOTPSetup();
+  
+  useEffect(() => {
+    generateQR();
+  }, []);
+  
+  return (
+    &lt;div&gt;
+      {qrCode && (
+        &lt;img 
+          src={qrCode} 
+          alt="TOTP QR Code"
+          className="w-48 h-48 mx-auto"
+        /&gt;
+      )}
+    &lt;/div&gt;
+  );
+};</code></pre>
+                    </div>
+
+                    <div class="bg-muted/50 rounded-lg p-4">
+                        <h5 class="font-medium mb-2">3. Verify Code</h5>
+                        <pre class="text-xs bg-background p-3 rounded border overflow-x-auto"><code data-mock="true">const verifyTOTP = async (code) => {
+  const response = await fetch('/api/auth/verify-totp', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token: code })
+  });
+  
+  if (response.ok) {
+    // TOTP setup successful
+    navigate('/dashboard');
+  }
+};</code></pre>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Key Implementation Points -->
+            <div class="mt-6 p-4 bg-accent/5 border border-accent/20 rounded-lg">
+                <h4 class="font-medium text-accent mb-2">Key Implementation Points</h4>
+                <ul class="text-sm space-y-1">
+                    <li>• <strong>Secret Storage:</strong> Store TOTP secret securely in database (base32 encoded)</li>
+                    <li>• <strong>URI Format:</strong> Use proper otpauth://totp/ format with issuer and account name</li>
+                    <li>• <strong>QR Generation:</strong> Generate as base64 data URL for immediate display</li>
+                    <li>• <strong>Verification Window:</strong> Allow 2-step tolerance for time drift</li>
+                    <li>• <strong>Error Handling:</strong> Provide clear feedback for invalid codes</li>
+                    <li>• <strong>Testing:</strong> Test with Google Authenticator, Authy, and Microsoft Authenticator</li>
+                </ul>
+            </div>
+        </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="bg-card border-t border-border mt-12">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center space-x-2 text-muted-foreground">
+                    <i class="fas fa-shield-alt"></i>
+                    <span class="text-sm">Secured by blockchain technology and two-factor authentication</span>
+                </div>
+                <div class="text-sm text-muted-foreground">
+                    VoteChain © 2024
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        (() => {
+            // Auto-format TOTP input
+            const totpInput = document.getElementById('totpCode');
+            if (totpInput) {
+                totpInput.addEventListener('input', (e) => {
+                    let value = e.target.value.replace(/\D/g, '');
+                    if (value.length > 6) value = value.slice(0, 6);
+                    e.target.value = value;
+                    
+                    // Auto-submit when 6 digits entered
+                    if (value.length === 6) {
+                        // TODO: Implement auto-verification
+                        console.log('Auto-verify TOTP code:', value);
+                    }
+                });
+            }
+            
+            // Copy secret functionality
+            document.addEventListener('click', (e) => {
+                if (e.target.closest('[data-implementation*="Copy secret"]')) {
+                    const secretElement = document.querySelector('.font-mono');
+                    if (secretElement) {
+                        navigator.clipboard.writeText(secretElement.textContent);
+                        // TODO: Show success toast
+                        console.log('Secret copied to clipboard');
+                    }
+                }
+            });
+            
+            // Form submission handler
+            document.querySelector('form').addEventListener('submit', (e) => {
+                e.preventDefault();
+                const totpCode = document.getElementById('totpCode').value;
+                
+                if (totpCode.length !== 6) {
+                    // TODO: Show error state
+                    console.log('Invalid TOTP code length');
+                    return;
+                }
+                
+                // TODO: Implement TOTP verification API call
+                console.log('Verifying TOTP code:', totpCode);
+            });
+        })();
+    </script>
+</body>
+</html>
