@@ -1,4 +1,4 @@
-import type { Express } from "express";
+import type { Express, Request } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { insertUserSchema, loginSchema, totpSetupSchema, voteSchema, faceEnrollSchema, faceVerifySchema } from "@shared/schema";
@@ -7,6 +7,8 @@ import jwt from "jsonwebtoken";
 import speakeasy from "speakeasy";
 import QRCode from "qrcode";
 import crypto from "crypto";
+// 1. IMPORT THE LOGGER
+import { logger } from "./logger";
 
 const JWT_SECRET = process.env.JWT_SECRET || "your-secret-key-change-this-in-production";
 const SALT_ROUNDS = 12;
@@ -33,6 +35,11 @@ const authenticateToken = async (req: any, res: any, next: any) => {
     req.user = user;
     next();
   } catch (error) {
+    // SIEM LOG: Suspicious Token Usage
+    logger.warn("Security Event: Invalid Token Used", {
+      event: { category: "authentication", action: "token_validate_failed" },
+      source: { ip: req.ip }
+    });
     return res.status(403).json({ message: 'Invalid or expired token' });
   }
 };
@@ -80,6 +87,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Generate JWT
       const token = jwt.sign({ userId: user.id }, JWT_SECRET, { expiresIn: '24h' });
       
+      // SIEM LOG: New User Registered
+      logger.info("Audit Event: User Registered", {
+        event: { category: "iam", action: "user_create" },
+        user: { id: user.id, name: user.username },
+        source: { ip: req.ip }
+      });
+
       res.status(201).json({
         message: "User created successfully",
         token,
@@ -102,12 +116,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Find user
       const user = await storage.getUserByUsername(username);
       if (!user) {
+        // SIEM LOG: Failed Login (Bad Username)
+        logger.warn("Security Event: Failed Login (User Not Found)", {
+           event: { category: "authentication", action: "login_failed" },
+           user: { name: username },
+           source: { ip: req.ip }
+        });
         return res.status(401).json({ message: "Invalid credentials" });
       }
       
       // Verify password
       const validPassword = await bcrypt.compare(password, user.password);
       if (!validPassword) {
+        // SIEM LOG: Failed Login (Bad Password)
+        logger.warn("Security Event: Failed Login (Bad Password)", {
+           event: { category: "authentication", action: "login_failed" },
+           user: { name: username },
+           source: { ip: req.ip }
+        });
         return res.status(401).json({ message: "Invalid credentials" });
       }
       
@@ -142,6 +168,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
         
         if (!verified) {
+          // SIEM LOG: Failed Login (Bad 2FA)
+          logger.warn("Security Event: Failed Login (Invalid TOTP)", {
+             event: { category: "authentication", action: "mfa_failed" },
+             user: { name: username },
+             source: { ip: req.ip }
+          });
           return res.status(401).json({ message: "Invalid TOTP code" });
         }
       }
@@ -249,6 +281,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const backupCodes = Array.from({ length: 8 }, () => 
         Math.random().toString(36).substring(2, 8).toUpperCase()
       );
+
+      // SIEM LOG: MFA Enabled
+      logger.info("Security Event: MFA Enabled", {
+        event: { category: "iam", action: "mfa_enable" },
+        user: { id: user.id },
+      });
       
       res.json({
         message: "TOTP verified and enabled successfully",
@@ -273,6 +311,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       await storage.updateUser(user.id, { 
         faceDescriptor: faceDescriptor,
         faceEnabled: true 
+      });
+
+      // SIEM LOG: Biometrics Enabled
+      logger.info("Security Event: Face ID Enrolled", {
+        event: { category: "iam", action: "biometric_enable" },
+        user: { id: user.id },
       });
       
       res.json({
@@ -316,6 +360,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Generate JWT token for successful face verification
         const token = jwt.sign({ userId: user.id }, JWT_SECRET, { expiresIn: '24h' });
         
+        // SIEM LOG: Successful Login (Full Chain)
+        logger.info("Security Event: Successful Login (Face Verified)", {
+          event: { category: "authentication", action: "login_success" },
+          user: { id: user.id, name: user.username },
+          source: { ip: req.ip },
+          auth_method: "biometric"
+        });
+
         res.json({
           message: "Face verification successful",
           isMatch: true,
@@ -330,6 +382,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }
         });
       } else {
+        // SIEM LOG: Failed Face Match
+        logger.warn("Security Event: Face Verification Failed", {
+           event: { category: "authentication", action: "biometric_failed" },
+           user: { name: username },
+           source: { ip: req.ip }
+        });
+
         res.status(401).json({ 
           message: "Face verification failed",
           isMatch: false,
@@ -405,6 +464,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Check if user has already voted
       const existingVote = await storage.getUserVote(user.id, electionId);
       if (existingVote) {
+        // SIEM LOG: Duplicate Vote Attempt
+        logger.warn("Security Event: Duplicate Vote Attempted", {
+           event: { category: "fraud", action: "double_voting" },
+           user: { id: user.id },
+           vote: { electionId }
+        });
         return res.status(400).json({ message: "You have already voted in this election" });
       }
       
@@ -440,6 +505,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         previousHash,
         votes: [vote],
         nonce,
+      });
+
+      // SIEM LOG: Vote Cast (AUDIT TRAIL)
+      logger.info("Audit Event: Vote Cast on Blockchain", {
+         event: { category: "database", action: "vote_created" },
+         user: { id: user.id },
+         blockchain: { 
+           hash: hash, 
+           blockNumber: blockNumber,
+           previousHash: previousHash
+         }
       });
       
       res.json({
