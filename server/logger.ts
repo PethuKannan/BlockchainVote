@@ -1,7 +1,7 @@
 import winston from 'winston';
 import { ElasticsearchTransport } from 'winston-elasticsearch';
 
-// 1. Configure the connection
+// 1. Configure the connection options
 const esTransportOpts = {
   level: 'info',
   clientOpts: {
@@ -21,6 +21,7 @@ const esTransportOpts = {
   )
 };
 
+// 2. Create the main logger (always logs to Console)
 export const logger = winston.createLogger({
   level: 'info',
   format: winston.format.combine(
@@ -32,8 +33,15 @@ export const logger = winston.createLogger({
   ],
 });
 
-// 2. Enable Elastic only if URL is present
+// 3. Add Elastic Transport (with Error Handling)
 if (process.env.ELASTIC_URL) {
-  logger.add(new ElasticsearchTransport(esTransportOpts));
+  const esTransport = new ElasticsearchTransport(esTransportOpts);
+
+  // CRITICAL: Listen for errors so we know why it fails!
+  esTransport.on('error', (error) => {
+    console.error('!! ELASTIC TRANSPORT ERROR !!', error);
+  });
+
+  logger.add(esTransport);
   console.log("✅ Elastic SIEM Logging Enabled");
 }
