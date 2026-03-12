@@ -61,4 +61,17 @@ if (process.env.ELASTIC_URL && process.env.ELASTIC_API_KEY) {
 
   logger.add(esTransport);
   console.log("✅ Elastic SIEM (Serverless) Logging & Geo-Tracking Enabled");
+
+  // --- ADD THIS TEMPORARY DEBUG SCRIPT ---
+  // @ts-ignore
+  esTransport.client.info()
+    .then(() => console.log("🟢 ELASTIC HANDSHAKE SUCCESS!"))
+    .catch((err: any) => {
+      console.error("🔴 ELASTIC HANDSHAKE FAILED! THE REAL REASON IS:");
+      console.error(err.message);
+      if (err.meta && err.meta.body) {
+         console.error(JSON.stringify(err.meta.body, null, 2));
+      }
+    });
+  // ---------------------------------------
 }
