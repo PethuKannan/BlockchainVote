@@ -35,6 +35,7 @@ const esTransportOpts = {
     auth: { apiKey: process.env.ELASTIC_API_KEY as string },
   },
   indexPrefix: 'evoting-telemetry', // Matches your project theme
+  ensureMappingTemplate: false,
 };
 
 // 3. Create the Main Logger
