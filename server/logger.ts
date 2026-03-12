@@ -51,7 +51,7 @@ export const logger = winston.createLogger({
 });
 
 // 4. Attach the Elastic Transport
-if (process.env.ELASTIC_CLOUD_ID && process.env.ELASTIC_API_KEY) {
+if (process.env.ELASTIC_URL && process.env.ELASTIC_API_KEY) {
   const esTransport = new ElasticsearchTransport(esTransportOpts);
 
   esTransport.on('error', (error) => {
