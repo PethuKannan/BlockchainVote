@@ -31,7 +31,7 @@ const geoIpEnricher = winston.format((info) => {
 const esTransportOpts = {
   level: 'info',
   clientOpts: {
-    cloud: { id: process.env.ELASTIC_CLOUD_ID as string },
+    node: process.env.ELASTIC_URL as string,
     auth: { apiKey: process.env.ELASTIC_API_KEY as string },
   },
   indexPrefix: 'evoting-telemetry', // Matches your project theme
