@@ -1,47 +1,63 @@
 import winston from 'winston';
 import { ElasticsearchTransport } from 'winston-elasticsearch';
+// @ts-ignore
+import { ecsFormat } from '@elastic/ecs-winston-format';
+import geoip from 'geoip-lite';
 
-// 1. Configure the connection options
+// 1. Custom Middleware to Inject GeoIP Data
+const geoIpEnricher = winston.format((info) => {
+  if (info.reqIp) {
+    // Explicitly cast reqIp as a string to satisfy TypeScript
+    const geo = geoip.lookup(info.reqIp as string); 
+    if (geo) {
+      info.source = {
+        ip: info.reqIp,
+        geo: {
+          location: {
+            lat: geo.ll[0],
+            lon: geo.ll[1]
+          },
+          city_name: geo.city,
+          country_iso_code: geo.country,
+          region_name: geo.region
+        }
+      };
+    }
+  }
+  return info;
+});
+
+// 2. Configure the Elastic Serverless Connection
 const esTransportOpts = {
   level: 'info',
   clientOpts: {
-    node: process.env.ELASTIC_URL,
-    // Serverless uses API Key, standard uses Username/Password
-    auth: process.env.ELASTIC_API_KEY 
-      ? { apiKey: process.env.ELASTIC_API_KEY }
-      : { 
-          username: process.env.ELASTIC_USERNAME || 'elastic',
-          password: process.env.ELASTIC_PASSWORD || '',
-        },
+    cloud: { id: process.env.ELASTIC_CLOUD_ID as string },
+    auth: { apiKey: process.env.ELASTIC_API_KEY as string },
   },
-  indexPrefix: 'vote-app-logs',
-  format: winston.format.combine(
-    winston.format.timestamp(),
-    winston.format.json()
-  )
+  indexPrefix: 'evoting-telemetry', // Matches your project theme
 };
 
-// 2. Create the main logger (always logs to Console)
+// 3. Create the Main Logger
 export const logger = winston.createLogger({
   level: 'info',
+  // Combine your GeoIP enricher with the official ECS format
   format: winston.format.combine(
-    winston.format.timestamp(),
-    winston.format.json()
+    geoIpEnricher(),
+    ecsFormat() 
   ),
   transports: [
     new winston.transports.Console(),
   ],
 });
 
-// 3. Add Elastic Transport (with Error Handling)
-if (process.env.ELASTIC_URL) {
+// 4. Attach the Elastic Transport
+if (process.env.ELASTIC_CLOUD_ID && process.env.ELASTIC_API_KEY) {
   const esTransport = new ElasticsearchTransport(esTransportOpts);
 
-  // CRITICAL: Listen for errors so we know why it fails!
   esTransport.on('error', (error) => {
-    console.error('!! ELASTIC TRANSPORT ERROR !!', error);
+    console.error('!! ELASTIC SIEM TRANSPORT ERROR !!', error);
   });
 
   logger.add(esTransport);
-  console.log("✅ Elastic SIEM Logging Enabled");
+  console.log("✅ Elastic SIEM (Serverless) Logging & Geo-Tracking Enabled");
 }
