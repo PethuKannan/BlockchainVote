@@ -47,14 +47,24 @@ export const logger = winston.createLogger({
 // 3. Attach Elastic Transport only if credentials are present
 if (process.env.ELASTIC_URL && process.env.ELASTIC_API_KEY) {
   const esTransport = new ElasticsearchTransport({
-    level: 'info',
-    clientOpts: {
-      node: process.env.ELASTIC_URL,
-      auth: { apiKey: process.env.ELASTIC_API_KEY },
+  level: 'info',
+  clientOpts: {
+    node: process.env.ELASTIC_URL,
+    auth: { apiKey: process.env.ELASTIC_API_KEY },
+    maxRetries: 5,
+    requestTimeout: 10000,
+    sniffOnStart: false,       // ✅ required for Elastic Cloud
+    tls: {
+      rejectUnauthorized: false // ✅ fixes bulk writer SSL handshake
     },
-    indexPrefix: 'evoting-telemetry',
-    ensureIndexTemplate: false, // ✅ Fix 2: was 'ensureMappingTemplate' (wrong property name)
-  });
+  },
+  indexPrefix: 'evoting-telemetry',
+  ensureIndexTemplate: false,
+  flushInterval: 2000,         // ✅ flush every 2s instead of default
+  retryLimit: 5,               // ✅ retry failed bulk writes
+  buffering: true,             // ✅ buffer logs if connection drops
+  bufferLimit: 100,
+});
 
   // Handle transport-level errors gracefully (don't crash the app)
   esTransport.on('error', (error) => {
