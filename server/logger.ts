@@ -1,9 +1,10 @@
 import winston from 'winston';
-import { ElasticsearchTransport } from 'winston-elasticsearch';
-import { ecsFormat } from '@elastic/ecs-winston-format'; // ✅ Fix 1: removed @ts-expect-error (types exist)
+import TransportStream from 'winston-transport';
+import { ecsFormat } from '@elastic/ecs-winston-format';
+import { Client } from '@elastic/elasticsearch';
 import geoip from 'geoip-lite';
 
-// 1. GeoIP Enricher — adds location data to every log that has reqIp
+// 1. GeoIP Enricher
 const geoIpEnricher = winston.format((info) => {
   if (info.reqIp) {
     const geo = geoip.lookup(info.reqIp as string);
@@ -11,10 +12,7 @@ const geoIpEnricher = winston.format((info) => {
       info.source = {
         ip: info.reqIp,
         geo: {
-          location: {
-            lat: geo.ll[0],
-            lon: geo.ll[1],
-          },
+          location: { lat: geo.ll[0], lon: geo.ll[1] },
           city_name: geo.city,
           country_iso_code: geo.country,
           region_name: geo.region,
@@ -25,7 +23,60 @@ const geoIpEnricher = winston.format((info) => {
   return info;
 });
 
-// 2. Create the Main Logger (console always active)
+// 2. Create Elastic client (Serverless-compatible)
+let esClient: Client | null = null;
+
+if (process.env.ELASTIC_URL && process.env.ELASTIC_API_KEY) {
+  esClient = new Client({
+    node: process.env.ELASTIC_URL,
+    auth: { apiKey: process.env.ELASTIC_API_KEY },
+  });
+
+  esClient.info()
+    .then(() => console.log('🟢 ELASTIC HANDSHAKE SUCCESS!'))
+    .catch((err: any) => {
+      console.error('🔴 ELASTIC HANDSHAKE FAILED!', err.message);
+    });
+
+  console.log('✅ Elastic SIEM (Serverless) Logging & Geo-Tracking Enabled');
+} else {
+  console.warn('⚠️  ELASTIC_URL or ELASTIC_API_KEY not set — console only');
+}
+
+// 3. Custom Serverless-compatible Winston Transport
+class ServerlessElasticTransport extends TransportStream {  // ✅ Fix 1: extend TransportStream not winston.Transport
+  private indexPrefix: string;
+
+  constructor(opts?: any) {
+    super(opts);
+    this.indexPrefix = opts?.indexPrefix || 'evoting-telemetry';
+  }
+
+  log(info: any, callback: () => void) {
+    setImmediate(() => this.emit('logged', info));         // ✅ Fix 2: emit works now (TransportStream extends EventEmitter)
+
+    if (!esClient) {
+      callback();
+      return;
+    }
+
+    const index = `${this.indexPrefix}-${new Date().toISOString().slice(0, 10)}`;
+
+    esClient.index({
+      index,
+      document: {
+        ...info,
+        '@timestamp': new Date().toISOString(),
+      },
+    }).catch((err: any) => {
+      console.error('!! ELASTIC INDEX ERROR !!', err.message);
+    });
+
+    callback();
+  }
+}
+
+// 4. Create the Main Logger
 export const logger = winston.createLogger({
   level: process.env.NODE_ENV === 'production' ? 'info' : 'debug',
   format: winston.format.combine(
@@ -41,50 +92,9 @@ export const logger = winston.createLogger({
             winston.format.simple()
           ),
     }),
+    new ServerlessElasticTransport({  // ✅ Fix 3: now satisfies TransportStream type
+      level: 'info',
+      indexPrefix: 'evoting-telemetry',
+    }),
   ],
 });
-
-// 3. Attach Elastic Transport only if credentials are present
-if (process.env.ELASTIC_URL && process.env.ELASTIC_API_KEY) {
-  const esTransport = new ElasticsearchTransport({
-  level: 'info',
-  clientOpts: {
-    node: process.env.ELASTIC_URL,
-    auth: { apiKey: process.env.ELASTIC_API_KEY },
-    maxRetries: 5,
-    requestTimeout: 10000,
-    sniffOnStart: false,       // ✅ required for Elastic Cloud
-    tls: {
-      rejectUnauthorized: false // ✅ fixes bulk writer SSL handshake
-    },
-  },
-  indexPrefix: 'evoting-telemetry',
-  ensureIndexTemplate: false,
-  flushInterval: 2000,         // ✅ flush every 2s instead of default
-  retryLimit: 5,               // ✅ retry failed bulk writes
-  buffering: true,             // ✅ buffer logs if connection drops
-  bufferLimit: 100,
-});
-
-  // Handle transport-level errors gracefully (don't crash the app)
-  esTransport.on('error', (error) => {
-    console.error('!! ELASTIC SIEM TRANSPORT ERROR !!', error);
-  });
-
-  logger.add(esTransport);
-  console.log('✅ Elastic SIEM (Serverless) Logging & Geo-Tracking Enabled');
-
-  // Handshake check — confirms Elastic connection on startup
-  // @ts-expect-error - client is not typed on ElasticsearchTransport
-  esTransport.client.info()
-    .then(() => console.log('🟢 ELASTIC HANDSHAKE SUCCESS!'))
-    .catch((err: any) => {
-      console.error('🔴 ELASTIC HANDSHAKE FAILED! THE REAL REASON IS:');
-      console.error(err.message);
-      if (err.meta?.body) {
-        console.error(JSON.stringify(err.meta.body, null, 2));
-      }
-    });
-} else {
-  console.warn('⚠️  ELASTIC_URL or ELASTIC_API_KEY not set — logging to console only');
-}
