@@ -1,77 +1,80 @@
 import winston from 'winston';
 import { ElasticsearchTransport } from 'winston-elasticsearch';
-// @ts-ignore
-import { ecsFormat } from '@elastic/ecs-winston-format';
+import { ecsFormat } from '@elastic/ecs-winston-format'; // ✅ Fix 1: removed @ts-expect-error (types exist)
 import geoip from 'geoip-lite';
 
-// 1. Custom Middleware to Inject GeoIP Data
+// 1. GeoIP Enricher — adds location data to every log that has reqIp
 const geoIpEnricher = winston.format((info) => {
   if (info.reqIp) {
-    // Explicitly cast reqIp as a string to satisfy TypeScript
-    const geo = geoip.lookup(info.reqIp as string); 
+    const geo = geoip.lookup(info.reqIp as string);
     if (geo) {
       info.source = {
         ip: info.reqIp,
         geo: {
           location: {
             lat: geo.ll[0],
-            lon: geo.ll[1]
+            lon: geo.ll[1],
           },
           city_name: geo.city,
           country_iso_code: geo.country,
-          region_name: geo.region
-        }
+          region_name: geo.region,
+        },
       };
     }
   }
   return info;
 });
 
-// 2. Configure the Elastic Serverless Connection
-const esTransportOpts = {
-  level: 'info',
-  clientOpts: {
-    node: process.env.ELASTIC_URL as string,
-    auth: { apiKey: process.env.ELASTIC_API_KEY as string },
-  },
-  indexPrefix: 'evoting-telemetry', // Matches your project theme
-  ensureMappingTemplate: false,
-};
-
-// 3. Create the Main Logger
+// 2. Create the Main Logger (console always active)
 export const logger = winston.createLogger({
-  level: 'info',
-  // Combine your GeoIP enricher with the official ECS format
+  level: process.env.NODE_ENV === 'production' ? 'info' : 'debug',
   format: winston.format.combine(
     geoIpEnricher(),
-    ecsFormat() 
+    ecsFormat()
   ),
   transports: [
-    new winston.transports.Console(),
+    new winston.transports.Console({
+      format: process.env.NODE_ENV === 'production'
+        ? winston.format.json()
+        : winston.format.combine(
+            winston.format.colorize(),
+            winston.format.simple()
+          ),
+    }),
   ],
 });
 
-// 4. Attach the Elastic Transport
+// 3. Attach Elastic Transport only if credentials are present
 if (process.env.ELASTIC_URL && process.env.ELASTIC_API_KEY) {
-  const esTransport = new ElasticsearchTransport(esTransportOpts);
+  const esTransport = new ElasticsearchTransport({
+    level: 'info',
+    clientOpts: {
+      node: process.env.ELASTIC_URL,
+      auth: { apiKey: process.env.ELASTIC_API_KEY },
+    },
+    indexPrefix: 'evoting-telemetry',
+    ensureIndexTemplate: false, // ✅ Fix 2: was 'ensureMappingTemplate' (wrong property name)
+  });
 
+  // Handle transport-level errors gracefully (don't crash the app)
   esTransport.on('error', (error) => {
     console.error('!! ELASTIC SIEM TRANSPORT ERROR !!', error);
   });
 
   logger.add(esTransport);
-  console.log("✅ Elastic SIEM (Serverless) Logging & Geo-Tracking Enabled");
+  console.log('✅ Elastic SIEM (Serverless) Logging & Geo-Tracking Enabled');
 
-  // --- ADD THIS TEMPORARY DEBUG SCRIPT ---
-  // @ts-ignore
+  // Handshake check — confirms Elastic connection on startup
+  // @ts-expect-error - client is not typed on ElasticsearchTransport
   esTransport.client.info()
-    .then(() => console.log("🟢 ELASTIC HANDSHAKE SUCCESS!"))
+    .then(() => console.log('🟢 ELASTIC HANDSHAKE SUCCESS!'))
     .catch((err: any) => {
-      console.error("🔴 ELASTIC HANDSHAKE FAILED! THE REAL REASON IS:");
+      console.error('🔴 ELASTIC HANDSHAKE FAILED! THE REAL REASON IS:');
       console.error(err.message);
-      if (err.meta && err.meta.body) {
-         console.error(JSON.stringify(err.meta.body, null, 2));
+      if (err.meta?.body) {
+        console.error(JSON.stringify(err.meta.body, null, 2));
       }
     });
-  // ---------------------------------------
+} else {
+  console.warn('⚠️  ELASTIC_URL or ELASTIC_API_KEY not set — logging to console only');
 }
