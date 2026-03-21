@@ -2,11 +2,11 @@ import { eq, and, desc } from 'drizzle-orm';
 import { db, users, elections, votes, votingBlocks } from './db';
 import { type User, type InsertUser, type Election, type Vote, type VotingBlock } from "@shared/schema";
 import { randomUUID } from "crypto";
-
 import { IStorage } from './storage';
 
 export class DatabaseStorage implements IStorage {
-  // User operations
+
+  // ── User operations ────────────────────────────────────────
   async getUser(id: string): Promise<User | undefined> {
     const result = await db.select().from(users).where(eq(users.id, id)).limit(1);
     return result[0] || undefined;
@@ -15,6 +15,10 @@ export class DatabaseStorage implements IStorage {
   async getUserByUsername(username: string): Promise<User | undefined> {
     const result = await db.select().from(users).where(eq(users.username, username)).limit(1);
     return result[0] || undefined;
+  }
+
+  async getAllUsers(): Promise<User[]> {
+    return await db.select().from(users);
   }
 
   async createUser(insertUser: InsertUser): Promise<User> {
@@ -28,21 +32,16 @@ export class DatabaseStorage implements IStorage {
       faceEnabled: false,
       createdAt: new Date(),
     };
-    
     await db.insert(users).values(newUser);
     return newUser as User;
   }
 
   async updateUser(id: string, updates: Partial<User>): Promise<User | undefined> {
-    const result = await db.update(users)
-      .set(updates)
-      .where(eq(users.id, id))
-      .returning();
-    
+    const result = await db.update(users).set(updates).where(eq(users.id, id)).returning();
     return result[0] || undefined;
   }
 
-  // Election operations
+  // ── Election operations ────────────────────────────────────
   async getElections(): Promise<Election[]> {
     return await db.select().from(elections);
   }
@@ -54,29 +53,28 @@ export class DatabaseStorage implements IStorage {
 
   async createElection(election: Omit<Election, 'id' | 'createdAt'>): Promise<Election> {
     const id = randomUUID();
-    const newElection = {
-      ...election,
-      id,
-      createdAt: new Date(),
-    };
-    
+    const newElection = { ...election, id, createdAt: new Date() };
     await db.insert(elections).values(newElection);
     return newElection as Election;
   }
 
-  // Vote operations
+  async updateElection(id: string, updates: Partial<Election>): Promise<Election | undefined> {
+    const result = await db.update(elections).set(updates).where(eq(elections.id, id)).returning();
+    return result[0] || undefined;
+  }
+
+  async deleteElection(id: string): Promise<void> {
+    await db.delete(elections).where(eq(elections.id, id));
+  }
+
+  // ── Vote operations ────────────────────────────────────────
   async getVotes(electionId: string): Promise<Vote[]> {
     return await db.select().from(votes).where(eq(votes.electionId, electionId));
   }
 
   async createVote(vote: Omit<Vote, 'id' | 'timestamp'>): Promise<Vote> {
     const id = randomUUID();
-    const newVote = {
-      ...vote,
-      id,
-      timestamp: new Date(),
-    };
-    
+    const newVote = { ...vote, id, timestamp: new Date() };
     await db.insert(votes).values(newVote);
     return newVote as Vote;
   }
@@ -85,27 +83,20 @@ export class DatabaseStorage implements IStorage {
     const result = await db.select().from(votes)
       .where(and(eq(votes.userId, userId), eq(votes.electionId, electionId)))
       .limit(1);
-    
     return result[0] || undefined;
   }
 
-  // Blockchain operations
+  // ── Blockchain operations ──────────────────────────────────
   async getLatestBlock(): Promise<VotingBlock | undefined> {
     const result = await db.select().from(votingBlocks)
       .orderBy(desc(votingBlocks.blockNumber))
       .limit(1);
-    
     return result[0] || undefined;
   }
 
   async createBlock(block: Omit<VotingBlock, 'id' | 'timestamp'>): Promise<VotingBlock> {
     const id = randomUUID();
-    const newBlock = {
-      ...block,
-      id,
-      timestamp: new Date(),
-    };
-    
+    const newBlock = { ...block, id, timestamp: new Date() };
     await db.insert(votingBlocks).values(newBlock);
     return newBlock as VotingBlock;
   }
@@ -114,12 +105,11 @@ export class DatabaseStorage implements IStorage {
     return await db.select().from(votingBlocks).orderBy(votingBlocks.blockNumber);
   }
 
-  // Initialize with sample data if database is empty
+  // ── Initialize sample data ─────────────────────────────────
   async initializeIfEmpty(): Promise<void> {
     const existingElections = await this.getElections();
-    
     if (existingElections.length === 0) {
-      const sampleElection: Omit<Election, 'id' | 'createdAt'> = {
+      await this.createElection({
         title: "2024 Student Council Election",
         description: "Vote for your student representative",
         startDate: new Date(),
@@ -128,11 +118,9 @@ export class DatabaseStorage implements IStorage {
         candidates: [
           { id: "candidate-1", name: "Alice Johnson", party: "Progressive Party" },
           { id: "candidate-2", name: "Bob Smith", party: "Conservative Party" },
-          { id: "candidate-3", name: "Carol Davis", party: "Independent" }
+          { id: "candidate-3", name: "Carol Davis", party: "Independent" },
         ],
-      };
-      
-      await this.createElection(sampleElection);
+      });
       console.log("✅ Database initialized with sample election data");
     }
   }
